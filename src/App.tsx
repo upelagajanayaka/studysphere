@@ -1,33 +1,41 @@
-import { Routes, Route } from "react-router-dom";
-import Layout from "./components/Layout";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-import Dashboard from "./pages/Dashboard";
-import Tasks from "./pages/Tasks";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import Dashboard from "./pages/Dashboard";
+import Tasks from "./pages/Tasks";
+import Library from "./pages/Library";
+import Chat from "./pages/Chat";
+import Profile from "./pages/Profile";
+
 import ProtectedRoute from "./components/ProtectedRoute";
+import Layout from "./components/Layout";
 
-
-function App() {
+export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="tasks" element={<Tasks />} />
-        <Route path="login" element={<Login />} />
-        <Route path="signup" element={<Signup />} />
+    <BrowserRouter>
+      <Routes>
+
+        {/* Public */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Protected */}
         <Route
-          path="/"
           element={
             <ProtectedRoute>
               <Layout />
             </ProtectedRoute>
           }
-        ></Route>
+        >
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/library" element={<Library />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/profile" element={<Profile />} />
+        </Route>
 
-      </Route>
-    </Routes>
+      </Routes>
+    </BrowserRouter>
   );
 }
-
-export default App;
