@@ -4,11 +4,15 @@ import { Send } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Chat() {
-    const [profiles, setProfiles] = useState<any[]>([]);
+    const [profiles, setProfiles] =
+        useState<any[]>([]);
+
     const [selectedUser, setSelectedUser] =
         useState<any>(null);
 
-    const [messages, setMessages] = useState<any[]>([]);
+    const [messages, setMessages] =
+        useState<any[]>([]);
+
     const [newMessage, setNewMessage] =
         useState("");
 
@@ -48,7 +52,9 @@ export default function Chat() {
     // =========================
     // GET USERS
     // =========================
-    const getUsers = async (myId: string) => {
+    const getUsers = async (
+        myId: string
+    ) => {
         const { data, error } = await supabase
             .from("profiles")
             .select("*")
@@ -74,7 +80,9 @@ export default function Chat() {
                 },
                 () => {
                     if (currentUser) {
-                        getUsers(currentUser.id);
+                        getUsers(
+                            currentUser.id
+                        );
                     }
                 }
             )
@@ -89,7 +97,10 @@ export default function Chat() {
     // GET MESSAGES
     // =========================
     useEffect(() => {
-        if (selectedUser && currentUser) {
+        if (
+            selectedUser &&
+            currentUser
+        ) {
             fetchMessages();
 
             const channel = supabase
@@ -108,13 +119,18 @@ export default function Chat() {
                 .subscribe();
 
             return () => {
-                supabase.removeChannel(channel);
+                supabase.removeChannel(
+                    channel
+                );
             };
         }
     }, [selectedUser]);
 
     const fetchMessages = async () => {
-        if (!selectedUser || !currentUser)
+        if (
+            !selectedUser ||
+            !currentUser
+        )
             return;
 
         const { data, error } = await supabase
@@ -131,9 +147,12 @@ export default function Chat() {
             setMessages(data);
 
             setTimeout(() => {
-                bottomRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                });
+                bottomRef.current?.scrollIntoView(
+                    {
+                        behavior:
+                            "smooth",
+                    }
+                );
             }, 100);
         }
     };
@@ -153,7 +172,8 @@ export default function Chat() {
             .insert([
                 {
                     text: newMessage,
-                    sender_id: currentUser.id,
+                    sender_id:
+                        currentUser.id,
                     receiver_id:
                         selectedUser.id,
                 },
@@ -168,102 +188,110 @@ export default function Chat() {
     };
 
     return (
-        <div className="h-screen bg-[#020817] text-white flex overflow-hidden">
+        <div className="h-[calc(100vh-64px)] md:h-screen bg-[#020817] text-white flex flex-col md:flex-row overflow-hidden">
 
             {/* SIDEBAR */}
-            <div className="w-[340px] border-r border-white/10 bg-[#071226] flex flex-col">
+            <div className="w-full md:w-[340px] h-[40vh] md:h-full border-r border-white/10 bg-[#071226] flex flex-col shrink-0">
 
                 {/* HEADER */}
-                <div className="p-6 border-b border-white/10">
-                    <h1 className="text-2xl font-bold">
+                <div className="p-4 md:p-6 border-b border-white/10 shrink-0">
+
+                    <h1 className="text-xl md:text-2xl font-bold">
                         Chats
                     </h1>
 
-                    <p className="text-sm text-gray-400 mt-1">
-                        StudySphere Messenger
+                    <p className="text-xs md:text-sm text-gray-400 mt-1">
+                        StudySphere
+                        Messenger
                     </p>
                 </div>
 
                 {/* USERS */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
 
-                    {profiles.map((profile) => (
-                        <motion.div
-                            key={profile.id}
-                            whileHover={{
-                                scale: 1.02,
-                            }}
-                            whileTap={{
-                                scale: 0.98,
-                            }}
-                            onClick={() =>
-                                setSelectedUser(
-                                    profile
-                                )
-                            }
-                            className={`p-4 rounded-3xl cursor-pointer transition-all border ${selectedUser?.id ===
-                                profile.id
-                                ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-transparent"
-                                : "bg-white/5 border-white/10 hover:bg-white/10"
-                                }`}
-                        >
-                            <div className="flex items-center gap-4">
+                    {profiles.map(
+                        (profile) => (
+                            <motion.div
+                                key={
+                                    profile.id
+                                }
+                                whileHover={{
+                                    scale: 1.02,
+                                }}
+                                whileTap={{
+                                    scale: 0.98,
+                                }}
+                                onClick={() =>
+                                    setSelectedUser(
+                                        profile
+                                    )
+                                }
+                                className={`p-3 md:p-4 rounded-3xl cursor-pointer transition-all border ${selectedUser?.id ===
+                                    profile.id
+                                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-transparent"
+                                    : "bg-white/5 border-white/10 hover:bg-white/10"
+                                    }`}
+                            >
+                                <div className="flex items-center gap-3">
 
-                                {/* AVATAR */}
-                                {profile.avatar_url ? (
-                                    <img
-                                        src={
-                                            profile.avatar_url
-                                        }
-                                        alt=""
-                                        className="w-14 h-14 rounded-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-lg font-bold">
-                                        {profile.name
-                                            ?.charAt(0)
-                                            .toUpperCase()}
+                                    {/* AVATAR */}
+                                    {profile.avatar_url ? (
+                                        <img
+                                            src={
+                                                profile.avatar_url
+                                            }
+                                            alt=""
+                                            className="w-12 h-12 md:w-14 md:h-14 rounded-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-indigo-600 flex items-center justify-center text-base md:text-lg font-bold">
+                                            {profile.name
+                                                ?.charAt(
+                                                    0
+                                                )
+                                                .toUpperCase()}
+                                        </div>
+                                    )}
+
+                                    {/* INFO */}
+                                    <div className="flex-1 overflow-hidden">
+
+                                        <h2 className="font-semibold text-sm md:text-lg truncate">
+                                            {
+                                                profile.name
+                                            }
+                                        </h2>
+
+                                        <p className="text-xs md:text-sm text-gray-400 truncate">
+                                            {
+                                                profile.email
+                                            }
+                                        </p>
                                     </div>
-                                )}
 
-                                {/* INFO */}
-                                <div className="flex-1 overflow-hidden">
-
-                                    <h2 className="font-semibold text-lg truncate">
-                                        {
-                                            profile.name
-                                        }
-                                    </h2>
-
-                                    <p className="text-sm text-gray-400 truncate">
-                                        {
-                                            profile.email
-                                        }
-                                    </p>
+                                    {/* ONLINE */}
+                                    <div
+                                        className={`w-3 h-3 rounded-full ${profile.is_online
+                                            ? "bg-green-400"
+                                            : "bg-gray-500"
+                                            }`}
+                                    />
                                 </div>
-
-                                {/* ONLINE STATUS */}
-                                <div
-                                    className={`w-3 h-3 rounded-full ${profile.is_online
-                                        ? "bg-green-400"
-                                        : "bg-gray-500"
-                                        }`}
-                                />
-                            </div>
-                        </motion.div>
-                    ))}
+                            </motion.div>
+                        )
+                    )}
                 </div>
             </div>
 
             {/* CHAT AREA */}
-            <div className="flex-1 flex flex-col h-full">
+            <div className="flex-1 flex flex-col h-[60vh] md:h-full">
 
                 {selectedUser ? (
                     <>
                         {/* TOP BAR */}
-                        <div className="h-[85px] border-b border-white/10 bg-[#071226] flex items-center px-6 shrink-0">
+                        <div className="h-[75px] md:h-[85px] border-b border-white/10 bg-[#071226] flex items-center px-4 md:px-6 shrink-0">
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3 md:gap-4">
 
                                 {selectedUser.avatar_url ? (
                                     <img
@@ -271,25 +299,27 @@ export default function Chat() {
                                             selectedUser.avatar_url
                                         }
                                         alt=""
-                                        className="w-14 h-14 rounded-full object-cover"
+                                        className="w-11 h-11 md:w-14 md:h-14 rounded-full object-cover"
                                     />
                                 ) : (
-                                    <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-lg font-bold">
+                                    <div className="w-11 h-11 md:w-14 md:h-14 rounded-full bg-indigo-600 flex items-center justify-center text-base md:text-lg font-bold">
                                         {selectedUser.name
-                                            ?.charAt(0)
+                                            ?.charAt(
+                                                0
+                                            )
                                             .toUpperCase()}
                                     </div>
                                 )}
 
                                 <div>
-                                    <h1 className="text-xl font-semibold">
+                                    <h1 className="text-base md:text-xl font-semibold">
                                         {
                                             selectedUser.name
                                         }
                                     </h1>
 
                                     <p
-                                        className={`text-sm ${selectedUser.is_online
+                                        className={`text-xs md:text-sm ${selectedUser.is_online
                                             ? "text-green-400"
                                             : "text-gray-400"
                                             }`}
@@ -303,77 +333,90 @@ export default function Chat() {
                         </div>
 
                         {/* MESSAGES */}
-                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                        <div className="flex-1 overflow-y-auto p-3 md:p-5 space-y-4">
 
-                            {messages.map((msg) => {
-                                const mine =
-                                    msg.sender_id ===
-                                    currentUser.id;
+                            {messages.map(
+                                (msg) => {
+                                    const mine =
+                                        msg.sender_id ===
+                                        currentUser.id;
 
-                                return (
-                                    <motion.div
-                                        key={msg.id}
-                                        initial={{
-                                            opacity: 0,
-                                            y: 10,
-                                        }}
-                                        animate={{
-                                            opacity: 1,
-                                            y: 0,
-                                        }}
-                                        className={`flex ${mine
-                                            ? "justify-end"
-                                            : "justify-start"
-                                            }`}
-                                    >
-                                        <div
-                                            className={`max-w-[280px] px-4 py-3 rounded-3xl shadow-lg ${mine
-                                                ? "bg-gradient-to-r from-indigo-600 to-purple-600"
-                                                : "bg-white/10"
+                                    return (
+                                        <motion.div
+                                            key={
+                                                msg.id
+                                            }
+                                            initial={{
+                                                opacity: 0,
+                                                y: 10,
+                                            }}
+                                            animate={{
+                                                opacity: 1,
+                                                y: 0,
+                                            }}
+                                            className={`flex ${mine
+                                                ? "justify-end"
+                                                : "justify-start"
                                                 }`}
                                         >
-                                            {/* MESSAGE */}
-                                            <p className="text-sm leading-relaxed break-words">
-                                                {
-                                                    msg.text
-                                                }
-                                            </p>
-
-                                            {/* TIME */}
-                                            <p className="text-[10px] text-gray-300 mt-1 text-right">
-                                                {new Date(
-                                                    msg.created_at
-                                                ).toLocaleString(
-                                                    "en-LK",
+                                            <div
+                                                className={`max-w-[85%] md:max-w-[320px] px-4 py-3 rounded-3xl shadow-lg ${mine
+                                                    ? "bg-gradient-to-r from-indigo-600 to-purple-600"
+                                                    : "bg-white/10"
+                                                    }`}
+                                            >
+                                                {/* TEXT */}
+                                                <p className="text-xs md:text-sm leading-relaxed break-words">
                                                     {
-                                                        timeZone:
-                                                            "Asia/Colombo",
-                                                        hour: "2-digit",
-                                                        minute: "2-digit",
-                                                        hour12: true,
+                                                        msg.text
                                                     }
-                                                )}
-                                            </p>
-                                        </div>
-                                    </motion.div>
-                                );
-                            })}
+                                                </p>
 
-                            <div ref={bottomRef} />
+                                                {/* TIME */}
+                                                <p className="text-[9px] md:text-[10px] text-gray-300 mt-1 text-right">
+                                                    {new Date(
+                                                        msg.created_at
+                                                    ).toLocaleString(
+                                                        "en-LK",
+                                                        {
+                                                            timeZone:
+                                                                "Asia/Colombo",
+                                                            hour: "2-digit",
+                                                            minute: "2-digit",
+                                                            hour12: true,
+                                                        }
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                }
+                            )}
+
+                            <div
+                                ref={
+                                    bottomRef
+                                }
+                            />
                         </div>
 
                         {/* INPUT */}
-                        <div className="p-4 border-t border-white/10 bg-[#071226] shrink-0">
+                        <div className="p-3 md:p-4 border-t border-white/10 bg-[#071226] shrink-0">
 
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 md:gap-3">
 
                                 <input
                                     type="text"
                                     placeholder="Type a message..."
-                                    value={newMessage}
-                                    onChange={(e) =>
+                                    value={
+                                        newMessage
+                                    }
+                                    onChange={(
+                                        e
+                                    ) =>
                                         setNewMessage(
-                                            e.target
+                                            e
+                                                .target
                                                 .value
                                         )
                                     }
@@ -387,7 +430,7 @@ export default function Chat() {
                                             sendMessage();
                                         }
                                     }}
-                                    className="flex-1 bg-white/10 border border-white/10 rounded-2xl px-5 py-4 outline-none text-sm focus:border-indigo-500"
+                                    className="flex-1 bg-white/10 border border-white/10 rounded-2xl px-4 md:px-5 py-3 md:py-4 outline-none text-sm focus:border-indigo-500"
                                 />
 
                                 <motion.button
@@ -400,16 +443,21 @@ export default function Chat() {
                                     onClick={
                                         sendMessage
                                     }
-                                    className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shadow-xl"
+                                    className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shrink-0"
                                 >
-                                    <Send size={22} />
+                                    <Send
+                                        size={
+                                            20
+                                        }
+                                    />
                                 </motion.button>
                             </div>
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-400 text-lg">
-                        Select a user to start chatting
+                    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm md:text-lg p-5 text-center">
+                        Select a user to start
+                        chatting
                     </div>
                 )}
             </div>

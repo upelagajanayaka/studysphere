@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
+import {
+    Upload,
+    Link2,
+    Search,
+    Trash2,
+    ExternalLink,
+    FileText,
+} from "lucide-react";
+
+import { motion } from "framer-motion";
+
 type Resource = {
     id: string;
     title: string;
@@ -10,218 +21,444 @@ type Resource = {
     category?: string;
 };
 
-const categories = ["All", "Programming", "Math", "Science", "Other"];
+const categories = [
+    "All",
+    "Programming",
+    "Math",
+    "Science",
+    "Other",
+];
 
 export default function Library() {
-    const [resources, setResources] = useState<Resource[]>([]);
-    const [title, setTitle] = useState("");
-    const [link, setLink] = useState("");
-    const [file, setFile] = useState<File | null>(null);
-    const [user, setUser] = useState<any>(null);
-    const [search, setSearch] = useState("");
-    const [selectedCategory, setSelectedCategory] = useState("All");
-    const [category, setCategory] = useState("Programming");
+    const [resources, setResources] =
+        useState<Resource[]>([]);
 
-    // 🔐 Get user
+    const [title, setTitle] =
+        useState("");
+
+    const [link, setLink] =
+        useState("");
+
+    const [file, setFile] =
+        useState<File | null>(null);
+
+    const [user, setUser] =
+        useState<any>(null);
+
+    const [search, setSearch] =
+        useState("");
+
+    const [
+        selectedCategory,
+        setSelectedCategory,
+    ] = useState("All");
+
+    const [category, setCategory] =
+        useState("Programming");
+
+    // =========================
+    // GET USER
+    // =========================
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => {
-            setUser(data.user);
-        });
+        supabase.auth
+            .getUser()
+            .then(({ data }) => {
+                setUser(data.user);
+            });
     }, []);
 
-    // 📥 Fetch resources
-    const fetchResources = async (currentUser: any) => {
+    // =========================
+    // FETCH RESOURCES
+    // =========================
+    const fetchResources = async (
+        currentUser: any
+    ) => {
         if (!currentUser) return;
 
-        const { data } = await supabase
-            .from("resources")
-            .select("*")
-            .eq("user_id", currentUser.id)
-            .order("created_at", { ascending: false });
+        const { data } =
+            await supabase
+                .from("resources")
+                .select("*")
+                .eq(
+                    "user_id",
+                    currentUser.id
+                )
+                .order(
+                    "created_at",
+                    {
+                        ascending:
+                            false,
+                    }
+                );
 
         setResources(data || []);
     };
 
     useEffect(() => {
-        if (user) fetchResources(user);
+        if (user)
+            fetchResources(user);
     }, [user]);
 
-    // 📤 Upload PDF
-    const uploadFile = async () => {
-        if (!file || !user || !title) return;
+    // =========================
+    // UPLOAD PDF
+    // =========================
+    const uploadFile =
+        async () => {
+            if (
+                !file ||
+                !user ||
+                !title
+            )
+                return;
 
-        const fileName = `${user.id}/${Date.now()}-${file.name}`;
+            const fileName = `${user.id}/${Date.now()}-${file.name}`;
 
-        const { error } = await supabase.storage
-            .from("resources")
-            .upload(fileName, file);
+            const { error } =
+                await supabase.storage
+                    .from(
+                        "resources"
+                    )
+                    .upload(
+                        fileName,
+                        file
+                    );
 
-        if (error) {
-            alert(error.message);
-            return;
-        }
+            if (error) {
+                alert(
+                    error.message
+                );
+                return;
+            }
 
-        const { data } = supabase.storage
-            .from("resources")
-            .getPublicUrl(fileName);
+            const { data } =
+                supabase.storage
+                    .from(
+                        "resources"
+                    )
+                    .getPublicUrl(
+                        fileName
+                    );
 
-        await supabase.from("resources").insert([
-            {
-                title,
-                type: "pdf",
-                file_url: data.publicUrl,
-                category,
-                user_id: user.id,
-            },
-        ]);
+            await supabase
+                .from(
+                    "resources"
+                )
+                .insert([
+                    {
+                        title,
+                        type: "pdf",
+                        file_url:
+                            data.publicUrl,
+                        category,
+                        user_id:
+                            user.id,
+                    },
+                ]);
 
-        setTitle("");
-        setFile(null);
-        fetchResources(user);
-    };
+            setTitle("");
+            setFile(null);
 
-    // 🔗 Add link
+            fetchResources(user);
+        };
+
+    // =========================
+    // ADD LINK
+    // =========================
     const addLink = async () => {
-        if (!title || !link || !user) return;
-
-        await supabase.from("resources").insert([
-            {
-                title,
-                type: "link",
-                link,
-                category,
-                user_id: user.id,
-            },
-        ]);
-
-        setTitle("");
-        setLink("");
-        fetchResources(user);
-    };
-
-    // 🗑️ Delete
-    const deleteResource = async (res: Resource) => {
-        if (!user) return;
-
-        if (res.type === "pdf" && res.file_url) {
-            const filePath = res.file_url.split("/").slice(-2).join("/");
-            await supabase.storage.from("resources").remove([filePath]);
-        }
+        if (
+            !title ||
+            !link ||
+            !user
+        )
+            return;
 
         await supabase
             .from("resources")
-            .delete()
-            .eq("id", res.id)
-            .eq("user_id", user.id);
+            .insert([
+                {
+                    title,
+                    type: "link",
+                    link,
+                    category,
+                    user_id:
+                        user.id,
+                },
+            ]);
+
+        setTitle("");
+        setLink("");
 
         fetchResources(user);
     };
 
-    // 🔍 FILTER LOGIC
-    const filtered = resources
-        .filter((res) =>
-            res.title.toLowerCase().includes(search.toLowerCase())
-        )
-        .filter((res) =>
-            selectedCategory === "All"
-                ? true
-                : res.category === selectedCategory
-        );
+    // =========================
+    // DELETE
+    // =========================
+    const deleteResource =
+        async (
+            res: Resource
+        ) => {
+            if (!user) return;
+
+            await supabase
+                .from("resources")
+                .delete()
+                .eq("id", res.id);
+
+            fetchResources(user);
+        };
+
+    // =========================
+    // FILTER
+    // =========================
+    const filtered =
+        resources
+            .filter((res) =>
+                res.title
+                    .toLowerCase()
+                    .includes(
+                        search.toLowerCase()
+                    )
+            )
+            .filter((res) =>
+                selectedCategory ===
+                    "All"
+                    ? true
+                    : res.category ===
+                    selectedCategory
+            );
 
     return (
-        <div className="p-6 text-white space-y-6">
-            <h1 className="text-2xl font-bold">Library</h1>
+        <div className="min-h-screen bg-[#020817] text-white p-4 md:p-6">
 
-            {/* INPUT */}
-            <div className="bg-gray-900 p-4 rounded-xl space-y-4">
-                <div>
-                    <label htmlFor="title-input" className="block mb-2 text-sm">Title</label>
-                    <input
-                        id="title-input"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Enter title"
-                        className="w-full p-2 bg-gray-800 rounded"
-                    />
-                </div>
+            {/* HEADER */}
+            <div className="mb-8">
 
-                {/* CATEGORY SELECT */}
-                <div>
-                    <label htmlFor="category-select" className="block mb-2 text-sm">Category</label>
-                    <select
-                        id="category-select"
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                        className="w-full p-2 bg-gray-800 rounded"
-                    >
-                        {categories.slice(1).map((cat) => (
-                            <option key={cat}>{cat}</option>
-                        ))}
-                    </select>
-                </div>
+                <h1 className="text-3xl md:text-4xl font-bold">
+                    Library
+                </h1>
 
-                {/* FILE */}
-                <div className="flex gap-2">
-                    <input
-                        id="file-input"
-                        type="file"
-                        aria-label="Upload PDF"
-                        onChange={(e) =>
-                            setFile(e.target.files?.[0] || null)
-                        }
-                    />
-                    <button
-                        type="button"
-                        onClick={uploadFile}
-                        className="bg-indigo-600 px-3 py-1 rounded"
-                    >
-                        Upload PDF
-                    </button>
-                </div>
-
-                {/* LINK */}
-                <div className="flex gap-2">
-                    <label htmlFor="link-input" className="sr-only">Link URL</label>
-                    <input
-                        id="link-input"
-                        value={link}
-                        onChange={(e) => setLink(e.target.value)}
-                        placeholder="Paste link"
-                        className="flex-1 p-2 bg-gray-800 rounded"
-                    />
-                    <button
-                        type="button"
-                        onClick={addLink}
-                        className="bg-green-600 px-3 py-1 rounded"
-                    >
-                        Add Link
-                    </button>
-                </div>
+                <p className="text-gray-400 mt-2">
+                    Upload and manage
+                    your study
+                    resources
+                </p>
             </div>
 
+            {/* UPLOAD CARD */}
+            <motion.div
+                initial={{
+                    opacity: 0,
+                    y: 20,
+                }}
+                animate={{
+                    opacity: 1,
+                    y: 0,
+                }}
+                className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-5 md:p-7 mb-8"
+            >
+
+                <h2 className="text-xl font-semibold mb-6">
+                    Upload Resource
+                </h2>
+
+                <div className="space-y-5">
+
+                    {/* TITLE */}
+                    <div>
+                        <label className="text-sm text-gray-300 block mb-2">
+                            Title
+                        </label>
+
+                        <input
+                            value={title}
+                            onChange={(e) =>
+                                setTitle(
+                                    e.target
+                                        .value
+                                )
+                            }
+                            placeholder="Enter title..."
+                            className="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500"
+                        />
+                    </div>
+
+                    {/* CATEGORY */}
+                    <div>
+                        <label htmlFor="category" className="text-sm text-gray-300 block mb-2">
+                            Category
+                        </label>
+
+                        <select
+                            id="category"
+                            title="Category"
+                            value={
+                                category
+                            }
+                            onChange={(
+                                e
+                            ) =>
+                                setCategory(
+                                    e
+                                        .target
+                                        .value
+                                )
+                            }
+                            className="w-full bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500"
+                        >
+                            {categories
+                                .slice(1)
+                                .map(
+                                    (
+                                        cat
+                                    ) => (
+                                        <option
+                                            key={
+                                                cat
+                                            }
+                                            className="bg-[#0f172a]"
+                                        >
+                                            {
+                                                cat
+                                            }
+                                        </option>
+                                    )
+                                )}
+                        </select>
+                    </div>
+
+                    {/* PDF */}
+                    <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+
+                        <div className="flex items-center gap-2 mb-4">
+
+                            <Upload
+                                size={
+                                    18
+                                }
+                            />
+
+                            <h3 className="font-medium">
+                                Upload
+                                PDF
+                            </h3>
+                        </div>
+
+                        <div className="flex flex-col md:flex-row gap-3">
+
+                            <input
+                                type="file"
+                                title="Select a PDF file to upload"
+                                aria-label="Select a PDF file to upload"
+                                onChange={(
+                                    e
+                                ) =>
+                                    setFile(
+                                        e
+                                            .target
+                                            .files?.[0] ||
+                                        null
+                                    )
+                                }
+                                className="flex-1 text-sm"
+                            />
+
+                            <button
+                                onClick={
+                                    uploadFile
+                                }
+                                className="bg-indigo-600 hover:bg-indigo-700 transition px-5 py-3 rounded-2xl font-medium"
+                            >
+                                Upload
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* LINK */}
+                    <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
+
+                        <div className="flex items-center gap-2 mb-4">
+
+                            <Link2
+                                size={
+                                    18
+                                }
+                            />
+
+                            <h3 className="font-medium">
+                                Add
+                                Link
+                            </h3>
+                        </div>
+
+                        <div className="flex flex-col md:flex-row gap-3">
+
+                            <input
+                                value={
+                                    link
+                                }
+                                onChange={(
+                                    e
+                                ) =>
+                                    setLink(
+                                        e
+                                            .target
+                                            .value
+                                    )
+                                }
+                                placeholder="Paste URL..."
+                                className="flex-1 bg-white/10 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-green-500"
+                            />
+
+                            <button
+                                onClick={
+                                    addLink
+                                }
+                                className="bg-green-600 hover:bg-green-700 transition px-5 py-3 rounded-2xl font-medium"
+                            >
+                                Add Link
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+
             {/* SEARCH */}
-            <div>
-                <label htmlFor="search-input" className="block mb-2 text-sm">Search</label>
+            <div className="relative mb-6">
+
+                <Search
+                    size={18}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+
                 <input
-                    id="search-input"
                     type="text"
-                    placeholder="Search..."
+                    placeholder="Search resources..."
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full p-3 bg-gray-900 border border-gray-800 rounded"
+                    onChange={(e) =>
+                        setSearch(
+                            e.target.value
+                        )
+                    }
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-indigo-500"
                 />
             </div>
 
-            {/* CATEGORY FILTER */}
-            <div className="flex gap-2">
+            {/* FILTERS */}
+            <div className="flex flex-wrap gap-3 mb-8">
+
                 {categories.map((cat) => (
                     <button
-                        type="button"
                         key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        className={`px-3 py-1 rounded ${selectedCategory === cat
+                        onClick={() =>
+                            setSelectedCategory(
+                                cat
+                            )
+                        }
+                        className={`px-5 py-2 rounded-2xl transition ${selectedCategory ===
+                            cat
                             ? "bg-indigo-600"
-                            : "bg-gray-800"
+                            : "bg-white/5 border border-white/10 hover:bg-white/10"
                             }`}
                     >
                         {cat}
@@ -229,42 +466,117 @@ export default function Library() {
                 ))}
             </div>
 
-            {/* LIST */}
-            <div className="space-y-3">
+            {/* RESOURCE LIST */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+
                 {filtered.map((res) => (
-                    <div
+                    <motion.div
                         key={res.id}
-                        className="bg-gray-900 p-4 rounded-xl flex justify-between"
+                        whileHover={{
+                            y: -5,
+                        }}
+                        className="bg-white/5 border border-white/10 rounded-3xl p-5 backdrop-blur-xl"
                     >
-                        <div>
-                            <p>{res.title}</p>
-                            <p className="text-xs text-gray-400">
-                                {res.type} • {res.category}
-                            </p>
+
+                        {/* TOP */}
+                        <div className="flex items-start justify-between gap-3 mb-4">
+
+                            <div className="flex items-center gap-3">
+
+                                <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 flex items-center justify-center">
+
+                                    <FileText
+                                        size={
+                                            22
+                                        }
+                                        className="text-indigo-400"
+                                    />
+                                </div>
+
+                                <div>
+                                    <h2 className="font-semibold text-lg line-clamp-1">
+                                        {
+                                            res.title
+                                        }
+                                    </h2>
+
+                                    <p className="text-xs text-gray-400">
+                                        {
+                                            res.type
+                                        }{" "}
+                                        •{" "}
+                                        {
+                                            res.category
+                                        }
+                                    </p>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="flex gap-3">
-                            {res.type === "pdf" ? (
-                                <a href={res.file_url} target="_blank">
+                        {/* ACTIONS */}
+                        <div className="flex items-center justify-between mt-6">
+
+                            {res.type ===
+                                "pdf" ? (
+                                <a
+                                    href={
+                                        res.file_url
+                                    }
+                                    target="_blank"
+                                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 transition px-4 py-2 rounded-xl text-sm"
+                                >
+                                    <ExternalLink
+                                        size={
+                                            16
+                                        }
+                                    />
                                     Open
                                 </a>
                             ) : (
-                                <a href={res.link} target="_blank">
+                                <a
+                                    href={
+                                        res.link
+                                    }
+                                    target="_blank"
+                                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 transition px-4 py-2 rounded-xl text-sm"
+                                >
+                                    <ExternalLink
+                                        size={
+                                            16
+                                        }
+                                    />
                                     Visit
                                 </a>
                             )}
 
                             <button
-                                type="button"
-                                onClick={() => deleteResource(res)}
-                                className="bg-red-600 px-2 rounded"
+                                onClick={() =>
+                                    deleteResource(
+                                        res
+                                    )
+                                }
+                                title="Delete resource"
+                                aria-label="Delete resource"
+                                className="w-10 h-10 rounded-xl bg-red-600 hover:bg-red-700 transition flex items-center justify-center"
                             >
-                                Delete
+                                <Trash2
+                                    size={
+                                        18
+                                    }
+                                />
                             </button>
                         </div>
-                    </div>
+                    </motion.div>
                 ))}
             </div>
+
+            {/* EMPTY */}
+            {filtered.length ===
+                0 && (
+                    <div className="text-center py-20 text-gray-400">
+                        No resources found
+                    </div>
+                )}
         </div>
     );
 }
