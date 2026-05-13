@@ -1,23 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { Send } from "lucide-react";
-import { motion } from "framer-motion";
+import {
+    Send,
+    Plus,
+    X,
+    Search,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Chat() {
-    const [profiles, setProfiles] =
-        useState<any[]>([]);
-
+    const [profiles, setProfiles] = useState<any[]>([]);
+    const [allUsers, setAllUsers] = useState<any[]>([]);
     const [selectedUser, setSelectedUser] =
         useState<any>(null);
 
-    const [messages, setMessages] =
-        useState<any[]>([]);
-
+    const [messages, setMessages] = useState<any[]>([]);
     const [newMessage, setNewMessage] =
         useState("");
 
     const [currentUser, setCurrentUser] =
         useState<any>(null);
+
+    const [showModal, setShowModal] =
+        useState(false);
+
+    const [search, setSearch] = useState("");
 
     const bottomRef =
         useRef<HTMLDivElement>(null);
@@ -38,7 +45,7 @@ export default function Chat() {
 
         setCurrentUser(user);
 
-        // SET ONLINE
+        // ONLINE STATUS
         await supabase
             .from("profiles")
             .update({
@@ -46,55 +53,76 @@ export default function Chat() {
             })
             .eq("id", user.id);
 
-        getUsers(user.id);
+        getChatUsers(user.id);
+        getAllUsers(user.id);
     };
 
     // =========================
-    // GET USERS
+    // GET CHAT USERS
     // =========================
-    const getUsers = async (
+    const getChatUsers = async (
         myId: string
     ) => {
-        const { data, error } = await supabase
+        const { data: messagesData } =
+            await supabase
+                .from("messages")
+                .select(
+                    "sender_id, receiver_id"
+                );
+
+        if (!messagesData) return;
+
+        const userIds = new Set<string>();
+
+        messagesData.forEach((msg) => {
+            if (
+                msg.sender_id === myId
+            ) {
+                userIds.add(
+                    msg.receiver_id
+                );
+            }
+
+            if (
+                msg.receiver_id === myId
+            ) {
+                userIds.add(
+                    msg.sender_id
+                );
+            }
+        });
+
+        const ids = Array.from(userIds);
+
+        if (ids.length === 0) {
+            setProfiles([]);
+            return;
+        }
+
+        const { data } = await supabase
+            .from("profiles")
+            .select("*")
+            .in("id", ids);
+
+        setProfiles(data || []);
+    };
+
+    // =========================
+    // GET ALL USERS
+    // =========================
+    const getAllUsers = async (
+        myId: string
+    ) => {
+        const { data } = await supabase
             .from("profiles")
             .select("*")
             .neq("id", myId);
 
-        if (!error && data) {
-            setProfiles(data);
-        }
+        setAllUsers(data || []);
     };
 
     // =========================
-    // LIVE USER STATUS
-    // =========================
-    useEffect(() => {
-        const channel = supabase
-            .channel("profiles-live")
-            .on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "profiles",
-                },
-                () => {
-                    if (currentUser) {
-                        getUsers(
-                            currentUser.id
-                        );
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [currentUser]);
-
-    // =========================
-    // GET MESSAGES
+    // FETCH MESSAGES
     // =========================
     useEffect(() => {
         if (
@@ -133,7 +161,7 @@ export default function Chat() {
         )
             return;
 
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from("messages")
             .select("*")
             .or(
@@ -143,18 +171,15 @@ export default function Chat() {
                 ascending: true,
             });
 
-        if (!error && data) {
-            setMessages(data);
+        setMessages(data || []);
 
-            setTimeout(() => {
-                bottomRef.current?.scrollIntoView(
-                    {
-                        behavior:
-                            "smooth",
-                    }
-                );
-            }, 100);
-        }
+        setTimeout(() => {
+            bottomRef.current?.scrollIntoView(
+                {
+                    behavior: "smooth",
+                }
+            );
+        }, 100);
     };
 
     // =========================
@@ -167,7 +192,7 @@ export default function Chat() {
         )
             return;
 
-        const { error } = await supabase
+        await supabase
             .from("messages")
             .insert([
                 {
@@ -179,36 +204,98 @@ export default function Chat() {
                 },
             ]);
 
-        if (error) {
-            console.log(error);
-            return;
-        }
-
         setNewMessage("");
     };
 
+    // =========================
+    // FORMAT TIME
+    // =========================
+    const formatTime = (
+        time: string
+    ) => {
+        return new Date(
+            time
+        ).toLocaleTimeString(
+            "en-LK",
+            {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+            }
+        );
+    };
+
+    // =========================
+    // FILTER USERS
+    // =========================
+    const filteredUsers =
+        allUsers.filter((user) =>
+            user.name
+                ?.toLowerCase()
+                .includes(
+                    search.toLowerCase()
+                )
+        );
+
     return (
-        <div className="h-[calc(100vh-64px)] md:h-screen bg-[#020817] text-white flex flex-col md:flex-row overflow-hidden">
-
+        <div
+            className="
+            h-screen
+            bg-[#020817]
+            text-white
+            flex
+            flex-col
+            md:flex-row
+            overflow-hidden
+            w-full
+        "
+        >
             {/* SIDEBAR */}
-            <div className="w-full md:w-[340px] h-[40vh] md:h-full border-r border-white/10 bg-[#071226] flex flex-col shrink-0">
-
+            <div
+                className="
+                w-full
+                md:w-[340px]
+                h-[320px]
+                md:h-full
+                border-r
+                md:border-r
+                border-b
+                md:border-b-0
+                border-white/10
+                bg-[#071226]
+                flex
+                flex-col
+                shrink-0
+            "
+            >
                 {/* HEADER */}
-                <div className="p-4 md:p-6 border-b border-white/10 shrink-0">
+                <div className="p-5 border-b border-white/10 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold">
+                            Chats
+                        </h1>
 
-                    <h1 className="text-xl md:text-2xl font-bold">
-                        Chats
-                    </h1>
+                        <p className="text-sm text-gray-400">
+                            Private messages
+                        </p>
+                    </div>
 
-                    <p className="text-xs md:text-sm text-gray-400 mt-1">
-                        StudySphere
-                        Messenger
-                    </p>
+                    {/* ADD USER */}
+                    <button
+                        onClick={() =>
+                            setShowModal(
+                                true
+                            )
+                        }
+                        className="w-12 h-12 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center"
+                        aria-label="Add new chat"
+                    >
+                        <Plus size={24} />
+                    </button>
                 </div>
 
                 {/* USERS */}
-                <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
-
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {profiles.map(
                         (profile) => (
                             <motion.div
@@ -226,14 +313,13 @@ export default function Chat() {
                                         profile
                                     )
                                 }
-                                className={`p-3 md:p-4 rounded-3xl cursor-pointer transition-all border ${selectedUser?.id ===
+                                className={`p-4 rounded-3xl cursor-pointer transition-all border ${selectedUser?.id ===
                                     profile.id
                                     ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-transparent"
                                     : "bg-white/5 border-white/10 hover:bg-white/10"
                                     }`}
                             >
-                                <div className="flex items-center gap-3">
-
+                                <div className="flex items-center gap-4">
                                     {/* AVATAR */}
                                     {profile.avatar_url ? (
                                         <img
@@ -241,10 +327,10 @@ export default function Chat() {
                                                 profile.avatar_url
                                             }
                                             alt=""
-                                            className="w-12 h-12 md:w-14 md:h-14 rounded-full object-cover"
+                                            className="w-14 h-14 rounded-full object-cover"
                                         />
                                     ) : (
-                                        <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-indigo-600 flex items-center justify-center text-base md:text-lg font-bold">
+                                        <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-lg font-bold">
                                             {profile.name
                                                 ?.charAt(
                                                     0
@@ -255,21 +341,20 @@ export default function Chat() {
 
                                     {/* INFO */}
                                     <div className="flex-1 overflow-hidden">
-
-                                        <h2 className="font-semibold text-sm md:text-lg truncate">
+                                        <h2 className="font-semibold text-lg truncate">
                                             {
                                                 profile.name
                                             }
                                         </h2>
 
-                                        <p className="text-xs md:text-sm text-gray-400 truncate">
-                                            {
-                                                profile.email
-                                            }
+                                        <p className="text-sm text-gray-400">
+                                            {profile.is_online
+                                                ? "Online"
+                                                : "Offline"}
                                         </p>
                                     </div>
 
-                                    {/* ONLINE */}
+                                    {/* STATUS */}
                                     <div
                                         className={`w-3 h-3 rounded-full ${profile.is_online
                                             ? "bg-green-400"
@@ -284,25 +369,22 @@ export default function Chat() {
             </div>
 
             {/* CHAT AREA */}
-            <div className="flex-1 flex flex-col h-[60vh] md:h-full">
-
+            <div className="flex-1 flex flex-col h-full min-w-0">
                 {selectedUser ? (
                     <>
                         {/* TOP BAR */}
-                        <div className="h-[75px] md:h-[85px] border-b border-white/10 bg-[#071226] flex items-center px-4 md:px-6 shrink-0">
-
-                            <div className="flex items-center gap-3 md:gap-4">
-
+                        <div className="h-[80px] border-b border-white/10 bg-[#071226] flex items-center px-5 shrink-0">
+                            <div className="flex items-center gap-4">
                                 {selectedUser.avatar_url ? (
                                     <img
                                         src={
                                             selectedUser.avatar_url
                                         }
                                         alt=""
-                                        className="w-11 h-11 md:w-14 md:h-14 rounded-full object-cover"
+                                        className="w-12 h-12 rounded-full object-cover"
                                     />
                                 ) : (
-                                    <div className="w-11 h-11 md:w-14 md:h-14 rounded-full bg-indigo-600 flex items-center justify-center text-base md:text-lg font-bold">
+                                    <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-lg font-bold">
                                         {selectedUser.name
                                             ?.charAt(
                                                 0
@@ -312,14 +394,14 @@ export default function Chat() {
                                 )}
 
                                 <div>
-                                    <h1 className="text-base md:text-xl font-semibold">
+                                    <h1 className="text-lg font-semibold">
                                         {
                                             selectedUser.name
                                         }
                                     </h1>
 
                                     <p
-                                        className={`text-xs md:text-sm ${selectedUser.is_online
+                                        className={`text-sm ${selectedUser.is_online
                                             ? "text-green-400"
                                             : "text-gray-400"
                                             }`}
@@ -333,8 +415,7 @@ export default function Chat() {
                         </div>
 
                         {/* MESSAGES */}
-                        <div className="flex-1 overflow-y-auto p-3 md:p-5 space-y-4">
-
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
                             {messages.map(
                                 (msg) => {
                                     const mine =
@@ -360,31 +441,20 @@ export default function Chat() {
                                                 }`}
                                         >
                                             <div
-                                                className={`max-w-[85%] md:max-w-[320px] px-4 py-3 rounded-3xl shadow-lg ${mine
+                                                className={`max-w-[240px] md:max-w-[320px] px-4 py-3 rounded-3xl shadow-lg ${mine
                                                     ? "bg-gradient-to-r from-indigo-600 to-purple-600"
                                                     : "bg-white/10"
                                                     }`}
                                             >
-                                                {/* TEXT */}
-                                                <p className="text-xs md:text-sm leading-relaxed break-words">
+                                                <p className="text-sm break-words">
                                                     {
                                                         msg.text
                                                     }
                                                 </p>
 
-                                                {/* TIME */}
-                                                <p className="text-[9px] md:text-[10px] text-gray-300 mt-1 text-right">
-                                                    {new Date(
+                                                <p className="text-[10px] text-gray-300 mt-1 text-right">
+                                                    {formatTime(
                                                         msg.created_at
-                                                    ).toLocaleString(
-                                                        "en-LK",
-                                                        {
-                                                            timeZone:
-                                                                "Asia/Colombo",
-                                                            hour: "2-digit",
-                                                            minute: "2-digit",
-                                                            hour12: true,
-                                                        }
                                                     )}
                                                 </p>
                                             </div>
@@ -401,10 +471,8 @@ export default function Chat() {
                         </div>
 
                         {/* INPUT */}
-                        <div className="p-3 md:p-4 border-t border-white/10 bg-[#071226] shrink-0">
-
-                            <div className="flex items-center gap-2 md:gap-3">
-
+                        <div className="p-4 border-t border-white/10 bg-[#071226] shrink-0">
+                            <div className="flex items-center gap-3">
                                 <input
                                     type="text"
                                     placeholder="Type a message..."
@@ -430,37 +498,225 @@ export default function Chat() {
                                             sendMessage();
                                         }
                                     }}
-                                    className="flex-1 bg-white/10 border border-white/10 rounded-2xl px-4 md:px-5 py-3 md:py-4 outline-none text-sm focus:border-indigo-500"
+                                    className="flex-1 bg-white/10 border border-white/10 rounded-2xl px-5 py-3 outline-none text-sm focus:border-indigo-500"
                                 />
 
-                                <motion.button
-                                    whileTap={{
-                                        scale: 0.9,
-                                    }}
-                                    whileHover={{
-                                        scale: 1.05,
-                                    }}
+                                <button
                                     onClick={
                                         sendMessage
                                     }
-                                    className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shrink-0"
+                                    className="w-12 h-12 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center"
+                                    aria-label="Send message"
                                 >
                                     <Send
                                         size={
                                             20
                                         }
                                     />
-                                </motion.button>
+                                </button>
                             </div>
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm md:text-lg p-5 text-center">
-                        Select a user to start
-                        chatting
+                    <div className="flex-1 flex items-center justify-center text-gray-400 text-lg p-5 text-center">
+                        Select a user to
+                        start chatting
                     </div>
                 )}
             </div>
+
+            {/* MODAL */}
+            <AnimatePresence>
+                {showModal && (
+                    <>
+                        {/* BACKDROP */}
+                        <motion.div
+                            initial={{
+                                opacity: 0,
+                            }}
+                            animate={{
+                                opacity: 1,
+                            }}
+                            exit={{
+                                opacity: 0,
+                            }}
+                            onClick={() =>
+                                setShowModal(
+                                    false
+                                )
+                            }
+                            className="fixed inset-0 bg-black/60 z-40"
+                        />
+
+                        {/* MODAL */}
+                        <motion.div
+                            initial={{
+                                opacity: 0,
+                                scale: 0.9,
+                            }}
+                            animate={{
+                                opacity: 1,
+                                scale: 1,
+                            }}
+                            exit={{
+                                opacity: 0,
+                                scale: 0.9,
+                            }}
+                            className="
+                            fixed
+                            inset-0
+                            z-50
+                            flex
+                            items-center
+                            justify-center
+                            p-4
+                        "
+                        >
+                            <div
+                                className="
+                                w-[95%]
+                                max-w-lg
+                                bg-[#071226]
+                                border
+                                border-white/10
+                                rounded-3xl
+                                p-6
+                                max-h-[80vh]
+                                overflow-hidden
+                            "
+                            >
+                                {/* HEADER */}
+                                <div className="flex items-center justify-between mb-5">
+                                    <h1 className="text-3xl font-bold">
+                                        All
+                                        Users
+                                    </h1>
+
+                                    <button
+                                        onClick={() =>
+                                            setShowModal(
+                                                false
+                                            )
+                                        }
+                                        className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center"
+                                        aria-label="Close user selection"
+                                    >
+                                        <X
+                                            size={
+                                                24
+                                            }
+                                        />
+                                    </button>
+                                </div>
+
+                                {/* SEARCH */}
+                                <div className="relative mb-5">
+                                    <Search
+                                        size={
+                                            20
+                                        }
+                                        className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                                    />
+
+                                    <input
+                                        type="text"
+                                        placeholder="Search users..."
+                                        value={
+                                            search
+                                        }
+                                        onChange={(
+                                            e
+                                        ) =>
+                                            setSearch(
+                                                e
+                                                    .target
+                                                    .value
+                                            )
+                                        }
+                                        className="w-full bg-white/10 border border-white/10 rounded-2xl pl-12 pr-4 py-4 outline-none"
+                                    />
+                                </div>
+
+                                {/* USERS */}
+                                <div className="space-y-3 overflow-y-auto max-h-[50vh] pr-1">
+                                    {filteredUsers.map(
+                                        (
+                                            user
+                                        ) => (
+                                            <div
+                                                key={
+                                                    user.id
+                                                }
+                                                onClick={() => {
+                                                    setSelectedUser(
+                                                        user
+                                                    );
+
+                                                    setShowModal(
+                                                        false
+                                                    );
+
+                                                    if (
+                                                        !profiles.find(
+                                                            (
+                                                                p
+                                                            ) =>
+                                                                p.id ===
+                                                                user.id
+                                                        )
+                                                    ) {
+                                                        setProfiles(
+                                                            (
+                                                                prev
+                                                            ) => [
+                                                                    ...prev,
+                                                                    user,
+                                                                ]
+                                                        );
+                                                    }
+                                                }}
+                                                className="bg-white/10 hover:bg-white/20 transition p-4 rounded-2xl cursor-pointer flex items-center gap-4"
+                                            >
+                                                {user.avatar_url ? (
+                                                    <img
+                                                        src={
+                                                            user.avatar_url
+                                                        }
+                                                        alt=""
+                                                        className="w-14 h-14 rounded-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-lg font-bold">
+                                                        {user.name
+                                                            ?.charAt(
+                                                                0
+                                                            )
+                                                            .toUpperCase()}
+                                                    </div>
+                                                )}
+
+                                                <div>
+                                                    <h2 className="font-semibold text-lg">
+                                                        {
+                                                            user.name
+                                                        }
+                                                    </h2>
+
+                                                    <p className="text-sm text-gray-400">
+                                                        {
+                                                            user.email
+                                                        }
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
