@@ -1,368 +1,662 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import {
-    Camera,
-    Mail,
-    User,
-    Save,
-    LogOut,
+    Upload,
+    Trash2,
+    Search,
+    Globe,
+    Lock,
+    FileText,
+    Link as LinkIcon,
 } from "lucide-react";
-import { motion } from "framer-motion";
 
-export default function Profile() {
-    const [user, setUser] = useState<any>(null);
+type Resource = {
+    id: string;
+    title: string;
+    type: "pdf" | "link";
+    file_url?: string;
+    link?: string;
+    category?: string;
+    visibility?: string;
+    user_id?: string;
+    created_at?: string;
 
-    const [name, setName] = useState("");
-    const [bio, setBio] = useState("");
-    const [avatar, setAvatar] = useState("");
+    profiles?: {
+        name?: string;
+        avatar_url?: string;
+    };
+};
 
-    const [loading, setLoading] = useState(false);
-    const [uploading, setUploading] =
+const categories = [
+    "All",
+    "Programming",
+    "Math",
+    "Science",
+    "Other",
+];
+
+export default function Library() {
+    const [resources, setResources] =
+        useState<Resource[]>([]);
+
+    const [title, setTitle] =
+        useState("");
+
+    const [link, setLink] =
+        useState("");
+
+    const [file, setFile] =
+        useState<File | null>(null);
+
+    const [user, setUser] =
+        useState<any>(null);
+
+    const [search, setSearch] =
+        useState("");
+
+    const [selectedCategory, setSelectedCategory] =
+        useState("All");
+
+    const [category, setCategory] =
+        useState("Programming");
+
+    const [visibility, setVisibility] =
+        useState("public");
+
+    const [loading, setLoading] =
         useState(false);
 
     // =========================
-    // GET PROFILE
+    // GET USER
     // =========================
     useEffect(() => {
-        getProfile();
+        supabase.auth.getUser().then(
+            ({ data }) => {
+                setUser(data.user);
+            }
+        );
     }, []);
 
-    const getProfile = async () => {
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
+    // =========================
+    // FETCH RESOURCES
+    // =========================
+    const fetchResources = async (
+        currentUser: any
+    ) => {
+        if (!currentUser) return;
 
-        if (!user) return;
+        const { data, error } =
+            await supabase
+                .from("resources")
+                .select(`
+                    *,
+                    profiles (
+                        name,
+                        avatar_url
+                    )
+                `)
+                .or(
+                    `visibility.eq.public,user_id.eq.${currentUser.id}`
+                )
+                .order("created_at", {
+                    ascending: false,
+                });
 
-        setUser(user);
-
-        const { data, error } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", user.id)
-            .single();
-
-        if (error) {
-            console.log(error.message);
-            return;
-        }
-
-        if (data) {
-            setName(data.name || "");
-            setBio(data.bio || "");
-            setAvatar(data.avatar_url || "");
+        if (!error && data) {
+            setResources(data);
         }
     };
 
+    useEffect(() => {
+        if (user) {
+            fetchResources(user);
+        }
+    }, [user]);
+
     // =========================
-    // UPLOAD AVATAR
+    // UPLOAD FILE
     // =========================
-    const uploadAvatar = async (
-        e: React.ChangeEvent<HTMLInputElement>
-    ) => {
+    const uploadFile = async () => {
+        if (!file || !title || !user)
+            return;
+
         try {
-            setUploading(true);
+            setLoading(true);
 
-            const file = e.target.files?.[0];
+            const fileName = `${user.id}/${Date.now()}-${file.name}`;
 
-            if (!file || !user) return;
-
-            const fileExt =
-                file.name.split(".").pop();
-
-            const fileName = `${user.id}.${fileExt}`;
-
-            // UPLOAD IMAGE
             const { error } =
                 await supabase.storage
-                    .from("avatars")
-                    .upload(fileName, file, {
-                        upsert: true,
-                    });
+                    .from("resources")
+                    .upload(fileName, file);
 
             if (error) {
-                console.log(error);
                 alert(error.message);
                 return;
             }
 
-            // GET PUBLIC URL
             const {
                 data: { publicUrl },
             } = supabase.storage
-                .from("avatars")
+                .from("resources")
                 .getPublicUrl(fileName);
 
-            setAvatar(publicUrl);
+            const { error: insertError } =
+                await supabase
+                    .from("resources")
+                    .insert([
+                        {
+                            title,
+                            type: "pdf",
+                            file_url: publicUrl,
+                            category,
+                            visibility,
+                            user_id: user.id,
+                        },
+                    ]);
+
+            if (insertError) {
+                alert(insertError.message);
+                return;
+            }
+
+            setTitle("");
+            setFile(null);
+
+            fetchResources(user);
 
         } catch (err) {
             console.log(err);
         } finally {
-            setUploading(false);
+            setLoading(false);
         }
     };
 
     // =========================
-    // SAVE PROFILE
+    // ADD LINK
     // =========================
-    const saveProfile = async () => {
+    const addLink = async () => {
+        if (!title || !link || !user)
+            return;
+
+        try {
+            setLoading(true);
+
+            const { error } =
+                await supabase
+                    .from("resources")
+                    .insert([
+                        {
+                            title,
+                            type: "link",
+                            link,
+                            category,
+                            visibility,
+                            user_id: user.id,
+                        },
+                    ]);
+
+            if (error) {
+                alert(error.message);
+                return;
+            }
+
+            setTitle("");
+            setLink("");
+
+            fetchResources(user);
+
+        } catch (err) {
+            console.log(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // =========================
+    // DELETE
+    // =========================
+    const deleteResource = async (
+        res: Resource
+    ) => {
         if (!user) return;
 
-        setLoading(true);
+        const confirmDelete =
+            window.confirm(
+                "Delete this resource?"
+            );
 
-        const { error } = await supabase
-            .from("profiles")
-            .update({
-                name,
-                bio,
-                avatar_url: avatar,
-            })
-            .eq("id", user.id);
+        if (!confirmDelete) return;
 
-        setLoading(false);
+        await supabase
+            .from("resources")
+            .delete()
+            .eq("id", res.id);
 
-        if (error) {
-            console.log(error);
-            alert(error.message);
-        } else {
-            alert("Profile updated 🚀");
-        }
-    };
-    // =========================
-    // LOGOUT
-    // =========================
-    const logout = async () => {
-        await supabase.auth.signOut();
-        window.location.href = "/login";
+        fetchResources(user);
     };
 
-    return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#111827] to-[#1e1b4b] text-white p-6"
-        >
+    // =========================
+    // FILTERS
+    // =========================
+    const filtered = resources
+        .filter((res) =>
+            res.title
+                .toLowerCase()
+                .includes(
+                    search.toLowerCase()
+                )
+        )
+        .filter((res) =>
+            selectedCategory === "All"
+                ? true
+                : res.category ===
+                selectedCategory
+        );
 
-            <div className="max-w-5xl mx-auto">
+    const publicResources =
+        filtered.filter(
+            (r) =>
+                r.visibility === "public"
+        );
 
-                {/* MAIN CARD */}
-                <motion.div
-                    initial={{
-                        y: -20,
-                        opacity: 0,
-                    }}
-                    animate={{
-                        y: 0,
-                        opacity: 1,
-                    }}
-                    className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl p-8 shadow-2xl"
-                >
+    const privateResources =
+        filtered.filter(
+            (r) =>
+                r.visibility === "private" &&
+                r.user_id === user?.id
+        );
 
-                    <div className="flex flex-col lg:flex-row gap-10">
+    // =========================
+    // CARD
+    // =========================
+    const ResourceCard = ({
+        res,
+    }: {
+        res: Resource;
+    }) => (
+        <div className="bg-[#071226] border border-white/10 rounded-3xl p-5 hover:border-indigo-500 transition">
 
-                        {/* LEFT SIDE */}
-                        <div className="flex flex-col items-center">
+            {/* TOP */}
+            <div className="flex items-start justify-between gap-3">
 
-                            <motion.div
-                                whileHover={{
-                                    scale: 1.05,
-                                }}
-                                className="relative"
-                            >
+                <div className="flex gap-4">
 
-                                {avatar ? (
-                                    <img
-                                        src={avatar}
-                                        alt="avatar"
-                                        className="w-40 h-40 rounded-full object-cover border-4 border-indigo-500 shadow-xl"
-                                    />
-                                ) : (
-                                    <div className="w-40 h-40 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-5xl font-bold shadow-xl">
-                                        {name
-                                            ? name
-                                                .charAt(0)
-                                                .toUpperCase()
-                                            : user?.email
-                                                ?.charAt(0)
-                                                .toUpperCase()}
-                                    </div>
-                                )}
+                    {/* ICON */}
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 flex items-center justify-center shrink-0">
+                        <FileText size={24} />
+                    </div>
 
-                                <div className="absolute bottom-2 right-2 bg-indigo-600 p-2 rounded-full shadow-lg">
-                                    <Camera size={18} />
+                    {/* CONTENT */}
+                    <div>
+
+                        <h3 className="text-lg font-semibold break-words">
+                            {res.title}
+                        </h3>
+
+                        <p className="text-sm text-gray-400 mt-1">
+                            {res.category}
+                        </p>
+
+                        {/* USER */}
+                        <div className="flex items-center gap-3 mt-4">
+
+                            {res.profiles
+                                ?.avatar_url ? (
+                                <img
+                                    src={
+                                        res
+                                            .profiles
+                                            .avatar_url
+                                    }
+                                    alt=""
+                                    className="w-10 h-10 rounded-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold">
+                                    {res.profiles?.name
+                                        ?.charAt(
+                                            0
+                                        )
+                                        .toUpperCase()}
                                 </div>
-                            </motion.div>
-
-                            {/* UPLOAD BUTTON */}
-                            <label className="mt-5 cursor-pointer bg-indigo-600 hover:bg-indigo-700 px-5 py-3 rounded-xl transition shadow-lg">
-
-                                {uploading
-                                    ? "Uploading..."
-                                    : "Upload Avatar"}
-
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={uploadAvatar}
-                                    className="hidden"
-                                />
-                            </label>
-                        </div>
-
-                        {/* RIGHT SIDE */}
-                        <div className="flex-1 space-y-6">
+                            )}
 
                             <div>
-                                <h1 className="text-4xl font-bold">
-                                    My Profile
-                                </h1>
-
-                                <p className="text-gray-400 mt-2">
-                                    Customize your StudySphere
-                                    profile.
+                                <p className="text-sm font-medium">
+                                    {res.profiles
+                                        ?.name ||
+                                        "Unknown User"}
                                 </p>
-                            </div>
 
-                            {/* NAME */}
-                            <div>
-                                <label htmlFor="full-name-input" className="text-sm text-gray-300 flex items-center gap-2 mb-2">
-                                    <User size={16} />
-                                    Full Name
-                                </label>
-
-                                <input
-                                    id="full-name-input"
-                                    type="text"
-                                    placeholder="Enter your full name"
-                                    value={name}
-                                    onChange={(e) =>
-                                        setName(e.target.value)
-                                    }
-                                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-
-                            {/* EMAIL */}
-                            <div>
-                                <label htmlFor="email-input" className="text-sm text-gray-300 flex items-center gap-2 mb-2">
-                                    <Mail size={16} />
-                                    Email
-                                </label>
-
-                                <input
-                                    id="email-input"
-                                    type="text"
-                                    disabled
-                                    value={user?.email || ""}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-gray-400"
-                                />
-                            </div>
-
-                            {/* BIO */}
-                            <div>
-                                <label htmlFor="bio-textarea" className="text-sm text-gray-300 mb-2 block">
-                                    Bio
-                                </label>
-
-                                <textarea
-                                    id="bio-textarea"
-                                    placeholder="Write something about yourself..."
-                                    value={bio}
-                                    onChange={(e) =>
-                                        setBio(e.target.value)
-                                    }
-                                    rows={5}
-                                    className="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                                />
-                            </div>
-
-                            {/* BUTTONS */}
-                            <div className="flex flex-wrap gap-4 pt-2">
-
-                                <motion.button
-                                    whileHover={{
-                                        scale: 1.03,
-                                    }}
-                                    whileTap={{
-                                        scale: 0.95,
-                                    }}
-                                    onClick={saveProfile}
-                                    className="bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg"
-                                >
-                                    <Save size={18} />
-
-                                    {loading
-                                        ? "Saving..."
-                                        : "Save Profile"}
-                                </motion.button>
-
-                                <motion.button
-                                    whileHover={{
-                                        scale: 1.03,
-                                    }}
-                                    whileTap={{
-                                        scale: 0.95,
-                                    }}
-                                    onClick={logout}
-                                    className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg"
-                                >
-                                    <LogOut size={18} />
-                                    Logout
-                                </motion.button>
+                                <p className="text-xs text-gray-500">
+                                    {new Date(
+                                        res.created_at ||
+                                        ""
+                                    ).toLocaleDateString()}
+                                </p>
                             </div>
                         </div>
                     </div>
-                </motion.div>
+                </div>
 
-                {/* EXTRA STATS */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-
-                    <motion.div
-                        whileHover={{
-                            y: -5,
-                        }}
-                        className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-lg"
-                    >
-                        <h3 className="text-gray-400 text-sm">
-                            Account Status
-                        </h3>
-
-                        <p className="text-2xl font-bold mt-2 text-green-400">
-                            Active
-                        </p>
-                    </motion.div>
-
-                    <motion.div
-                        whileHover={{
-                            y: -5,
-                        }}
-                        className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-lg"
-                    >
-                        <h3 className="text-gray-400 text-sm">
-                            Joined
-                        </h3>
-
-                        <p className="text-2xl font-bold mt-2">
-                            2025
-                        </p>
-                    </motion.div>
-
-                    <motion.div
-                        whileHover={{
-                            y: -5,
-                        }}
-                        className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-lg"
-                    >
-                        <h3 className="text-gray-400 text-sm">
-                            Role
-                        </h3>
-
-                        <p className="text-2xl font-bold mt-2 text-indigo-400">
-                            Student
-                        </p>
-                    </motion.div>
+                {/* VISIBILITY */}
+                <div
+                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs ${res.visibility ===
+                        "public"
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-yellow-500/20 text-yellow-400"
+                        }`}
+                >
+                    {res.visibility ===
+                        "public" ? (
+                        <>
+                            <Globe size={12} />
+                            Public
+                        </>
+                    ) : (
+                        <>
+                            <Lock size={12} />
+                            Private
+                        </>
+                    )}
                 </div>
             </div>
-        </motion.div>
+
+            {/* BUTTONS */}
+            <div className="flex gap-3 mt-6">
+
+                {res.type === "pdf" ? (
+                    <a
+                        href={res.file_url}
+                        target="_blank"
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 py-3 rounded-2xl text-center transition"
+                    >
+                        Open PDF
+                    </a>
+                ) : (
+                    <a
+                        href={res.link}
+                        target="_blank"
+                        className="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-2xl text-center transition flex items-center justify-center gap-2"
+                    >
+                        <LinkIcon size={18} />
+                        Visit Link
+                    </a>
+                )}
+
+                {res.user_id ===
+                    user?.id && (
+                        <button
+                            onClick={() =>
+                                deleteResource(
+                                    res
+                                )
+                            }
+                            aria-label="Delete resource"
+                            title="Delete resource"
+                            className="bg-red-600 hover:bg-red-700 p-3 rounded-2xl transition"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+                    )}
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="min-h-screen bg-[#020817] text-white p-4 md:p-6">
+
+            {/* HEADER */}
+            <div className="mb-8">
+                <h1 className="text-4xl font-bold">
+                    Resource Library
+                </h1>
+
+                <p className="text-gray-400 mt-2">
+                    Share and discover study
+                    resources.
+                </p>
+            </div>
+
+            {/* UPLOAD BOX */}
+            <div className="bg-[#071226] border border-white/10 rounded-3xl p-5 md:p-6 mb-8">
+
+                <h2 className="text-2xl font-semibold mb-6">
+                    Upload Resource
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                    {/* TITLE */}
+                    <div>
+                        <label className="text-sm text-gray-400 mb-2 block">
+                            Title
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="Title"
+                            value={title}
+                            onChange={(e) =>
+                                setTitle(
+                                    e.target.value
+                                )
+                            }
+                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500"
+                        />
+                    </div>
+
+                    {/* CATEGORY */}
+                    <div>
+                        <label htmlFor="profile-category-select" className="text-sm text-gray-400 mb-2 block">
+                            Category
+                        </label>
+                        <select
+                            id="profile-category-select"
+                            value={category}
+                            onChange={(e) =>
+                                setCategory(
+                                    e.target.value
+                                )
+                            }
+                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none"
+                        >
+                            {categories
+                                .slice(1)
+                                .map((cat) => (
+                                    <option
+                                        key={cat}
+                                        value={cat}
+                                        className="bg-[#071226]"
+                                    >
+                                        {cat}
+                                    </option>
+                                ))}
+                        </select>
+                    </div>
+
+                    {/* VISIBILITY */}
+                    <div>
+                        <label htmlFor="profile-visibility-select" className="text-sm text-gray-400 mb-2 block">
+                            Visibility
+                        </label>
+                        <select
+                            id="profile-visibility-select"
+                            value={visibility}
+                            onChange={(e) =>
+                                setVisibility(
+                                    e.target.value
+                                )
+                            }
+                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none"
+                        >
+                            <option value="public">
+                                Public
+                            </option>
+
+                            <option value="private">
+                                Private
+                            </option>
+                        </select>
+                    </div>
+
+                    {/* FILE */}
+                    <div>
+                        <label className="text-sm text-gray-400 mb-2 block">
+                            Upload PDF
+                        </label>
+                        <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={(e) =>
+                                setFile(
+                                    e.target
+                                        .files?.[0] ||
+                                    null
+                                )
+                            }
+                            title="Upload PDF file"
+                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3"
+                        />
+                    </div>
+                </div>
+
+                {/* LINK */}
+                <div className="mt-5">
+                    <label className="text-sm text-gray-400 mb-2 block">
+                        Or Add Link
+                    </label>
+                    <div className="flex flex-col md:flex-row gap-3">
+
+                        <input
+                            type="text"
+                            placeholder="Paste link..."
+                            value={link}
+                            onChange={(e) =>
+                                setLink(
+                                    e.target.value
+                                )
+                            }
+                            className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none"
+                        />
+
+                        <button
+                            onClick={addLink}
+                            className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-2xl transition"
+                        >
+                            Add Link
+                        </button>
+                    </div>
+                </div>
+
+                {/* UPLOAD */}
+                <button
+                    onClick={uploadFile}
+                    disabled={loading}
+                    className="mt-6 bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-2xl transition flex items-center gap-2"
+                >
+                    <Upload size={18} />
+
+                    {loading
+                        ? "Uploading..."
+                        : "Upload PDF"}
+                </button>
+            </div>
+
+            {/* SEARCH */}
+            <div className="mb-8">
+                <label htmlFor="search-input" className="sr-only">Search resources</label>
+                <div className="relative">
+
+                    <Search
+                        size={18}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+
+                    <input
+                        id="search-input"
+                        type="text"
+                        placeholder="Search resources..."
+                        value={search}
+                        onChange={(e) =>
+                            setSearch(
+                                e.target.value
+                            )
+                        }
+                        className="w-full bg-[#071226] border border-white/10 rounded-2xl pl-12 pr-4 py-4 outline-none focus:border-indigo-500"
+                    />
+                </div>
+            </div>
+
+            {/* FILTERS */}
+            <div className="flex flex-wrap gap-3 mb-8">
+
+                {categories.map((cat) => (
+                    <button
+                        key={cat}
+                        onClick={() =>
+                            setSelectedCategory(
+                                cat
+                            )
+                        }
+                        className={`px-4 py-2 rounded-xl transition ${selectedCategory ===
+                            cat
+                            ? "bg-indigo-600"
+                            : "bg-white/5 hover:bg-white/10"
+                            }`}
+                    >
+                        {cat}
+                    </button>
+                ))}
+            </div>
+
+            {/* PUBLIC */}
+            <div className="mb-12">
+
+                <div className="flex items-center gap-3 mb-6">
+                    <Globe className="text-green-400" />
+
+                    <h2 className="text-3xl font-bold">
+                        Public Resources
+                    </h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+
+                    {publicResources.map(
+                        (res) => (
+                            <ResourceCard
+                                key={res.id}
+                                res={res}
+                            />
+                        )
+                    )}
+                </div>
+            </div>
+
+            {/* PRIVATE */}
+            <div>
+
+                <div className="flex items-center gap-3 mb-6">
+                    <Lock className="text-yellow-400" />
+
+                    <h2 className="text-3xl font-bold">
+                        My Private Resources
+                    </h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+
+                    {privateResources.map(
+                        (res) => (
+                            <ResourceCard
+                                key={res.id}
+                                res={res}
+                            />
+                        )
+                    )}
+                </div>
+            </div>
+        </div>
     );
 }
