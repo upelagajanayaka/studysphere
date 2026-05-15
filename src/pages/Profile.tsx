@@ -1,210 +1,200 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+
 import {
-    Upload,
-    Trash2,
-    Search,
-    Globe,
-    Lock,
-    FileText,
-    Link as LinkIcon,
+    Camera,
+    Mail,
+    User,
+    Save,
+    LogOut,
 } from "lucide-react";
 
-type Resource = {
-    id: string;
-    title: string;
-    type: "pdf" | "link";
-    file_url?: string;
-    link?: string;
-    category?: string;
-    visibility?: string;
-    user_id?: string;
-    created_at?: string;
+import { motion } from "framer-motion";
 
-    profiles?: {
-        name?: string;
-        avatar_url?: string;
-    };
-};
-
-const categories = [
-    "All",
-    "Programming",
-    "Math",
-    "Science",
-    "Other",
-];
-
-export default function Library() {
-    const [resources, setResources] =
-        useState<Resource[]>([]);
-
-    const [title, setTitle] =
-        useState("");
-
-    const [link, setLink] =
-        useState("");
-
-    const [file, setFile] =
-        useState<File | null>(null);
+export default function Profile() {
 
     const [user, setUser] =
         useState<any>(null);
 
-    const [search, setSearch] =
+    const [name, setName] =
         useState("");
 
-    const [selectedCategory, setSelectedCategory] =
-        useState("All");
+    const [bio, setBio] =
+        useState("");
 
-    const [category, setCategory] =
-        useState("Programming");
-
-    const [visibility, setVisibility] =
-        useState("public");
+    const [avatar, setAvatar] =
+        useState("");
 
     const [loading, setLoading] =
         useState(false);
 
-    // =========================
-    // GET USER
-    // =========================
-    useEffect(() => {
-        supabase.auth.getUser().then(
-            ({ data }) => {
-                setUser(data.user);
-            }
-        );
-    }, []);
+    const [uploading, setUploading] =
+        useState(false);
 
     // =========================
-    // FETCH RESOURCES
+    // GET PROFILE
     // =========================
-    const fetchResources = async (
-        currentUser: any
-    ) => {
-        if (!currentUser) return;
+    useEffect(() => {
+        getProfile();
+    }, []);
+
+    const getProfile = async () => {
+
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) return;
+
+        setUser(user);
 
         const { data, error } =
             await supabase
-                .from("resources")
-                .select(`
-                    *,
-                    profiles (
-                        name,
-                        avatar_url
-                    )
-                `)
-                .or(
-                    `visibility.eq.public,user_id.eq.${currentUser.id}`
-                )
-                .order("created_at", {
-                    ascending: false,
-                });
+                .from("profiles")
+                .select("*")
+                .eq("id", user.id)
+                .single();
 
-        if (!error && data) {
-            setResources(data);
+        if (error) {
+            console.log(error);
+            return;
+        }
+
+        if (data) {
+
+            setName(data.name || "");
+
+            setBio(data.bio || "");
+
+            setAvatar(
+                data.avatar_url || ""
+            );
         }
     };
 
-    useEffect(() => {
-        if (user) {
-            fetchResources(user);
-        }
-    }, [user]);
-
     // =========================
-    // UPLOAD FILE
+    // UPLOAD AVATAR
     // =========================
-    const uploadFile = async () => {
-        if (!file || !title || !user)
-            return;
+    const uploadAvatar = async (
+        e: React.ChangeEvent<HTMLInputElement>
+    ) => {
 
         try {
-            setLoading(true);
 
-            const fileName = `${user.id}/${Date.now()}-${file.name}`;
+            setUploading(true);
 
+            const file =
+                e.target.files?.[0];
+
+            if (!file || !user)
+                return;
+
+            const fileExt =
+                file.name
+                    .split(".")
+                    .pop();
+
+            const fileName =
+                `${user.id}.${fileExt}`;
+
+            // DELETE OLD FILES
+            const { data: oldFiles } =
+                await supabase.storage
+                    .from("avatars")
+                    .list("", {
+                        search: user.id,
+                    });
+
+            if (
+                oldFiles &&
+                oldFiles.length > 0
+            ) {
+
+                const filesToDelete =
+                    oldFiles.map(
+                        (file) =>
+                            file.name
+                    );
+
+                await supabase.storage
+                    .from("avatars")
+                    .remove(
+                        filesToDelete
+                    );
+            }
+
+            // UPLOAD NEW FILE
             const { error } =
                 await supabase.storage
-                    .from("resources")
-                    .upload(fileName, file);
+                    .from("avatars")
+                    .upload(
+                        fileName,
+                        file,
+                        {
+                            upsert: true,
+                        }
+                    );
 
             if (error) {
-                alert(error.message);
+                alert(
+                    error.message
+                );
                 return;
             }
 
+            // GET PUBLIC URL
             const {
                 data: { publicUrl },
             } = supabase.storage
-                .from("resources")
-                .getPublicUrl(fileName);
+                .from("avatars")
+                .getPublicUrl(
+                    fileName
+                );
 
-            const { error: insertError } =
-                await supabase
-                    .from("resources")
-                    .insert([
-                        {
-                            title,
-                            type: "pdf",
-                            file_url: publicUrl,
-                            category,
-                            visibility,
-                            user_id: user.id,
-                        },
-                    ]);
-
-            if (insertError) {
-                alert(insertError.message);
-                return;
-            }
-
-            setTitle("");
-            setFile(null);
-
-            fetchResources(user);
+            setAvatar(publicUrl);
 
         } catch (err) {
             console.log(err);
         } finally {
-            setLoading(false);
+            setUploading(false);
         }
     };
 
     // =========================
-    // ADD LINK
+    // SAVE PROFILE
     // =========================
-    const addLink = async () => {
-        if (!title || !link || !user)
-            return;
+    const saveProfile = async () => {
+
+        if (!user) return;
 
         try {
+
             setLoading(true);
 
             const { error } =
                 await supabase
-                    .from("resources")
-                    .insert([
-                        {
-                            title,
-                            type: "link",
-                            link,
-                            category,
-                            visibility,
-                            user_id: user.id,
-                        },
-                    ]);
+                    .from("profiles")
+                    .update({
+                        name,
+                        bio,
+                        avatar_url:
+                            avatar,
+                    })
+                    .eq(
+                        "id",
+                        user.id
+                    );
 
             if (error) {
-                alert(error.message);
+                alert(
+                    error.message
+                );
                 return;
             }
 
-            setTitle("");
-            setLink("");
-
-            fetchResources(user);
+            alert(
+                "Profile updated successfully 🚀"
+            );
 
         } catch (err) {
             console.log(err);
@@ -214,448 +204,314 @@ export default function Library() {
     };
 
     // =========================
-    // DELETE
+    // LOGOUT
     // =========================
-    const deleteResource = async (
-        res: Resource
-    ) => {
-        if (!user) return;
+    const logout = async () => {
 
-        const confirmDelete =
-            window.confirm(
-                "Delete this resource?"
-            );
+        await supabase.auth.signOut();
 
-        if (!confirmDelete) return;
-
-        await supabase
-            .from("resources")
-            .delete()
-            .eq("id", res.id);
-
-        fetchResources(user);
+        window.location.href =
+            "/login";
     };
-
-    // =========================
-    // FILTERS
-    // =========================
-    const filtered = resources
-        .filter((res) =>
-            res.title
-                .toLowerCase()
-                .includes(
-                    search.toLowerCase()
-                )
-        )
-        .filter((res) =>
-            selectedCategory === "All"
-                ? true
-                : res.category ===
-                selectedCategory
-        );
-
-    const publicResources =
-        filtered.filter(
-            (r) =>
-                r.visibility === "public"
-        );
-
-    const privateResources =
-        filtered.filter(
-            (r) =>
-                r.visibility === "private" &&
-                r.user_id === user?.id
-        );
-
-    // =========================
-    // CARD
-    // =========================
-    const ResourceCard = ({
-        res,
-    }: {
-        res: Resource;
-    }) => (
-        <div className="bg-[#071226] border border-white/10 rounded-3xl p-5 hover:border-indigo-500 transition">
-
-            {/* TOP */}
-            <div className="flex items-start justify-between gap-3">
-
-                <div className="flex gap-4">
-
-                    {/* ICON */}
-                    <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 flex items-center justify-center shrink-0">
-                        <FileText size={24} />
-                    </div>
-
-                    {/* CONTENT */}
-                    <div>
-
-                        <h3 className="text-lg font-semibold break-words">
-                            {res.title}
-                        </h3>
-
-                        <p className="text-sm text-gray-400 mt-1">
-                            {res.category}
-                        </p>
-
-                        {/* USER */}
-                        <div className="flex items-center gap-3 mt-4">
-
-                            {res.profiles
-                                ?.avatar_url ? (
-                                <img
-                                    src={
-                                        res
-                                            .profiles
-                                            .avatar_url
-                                    }
-                                    alt=""
-                                    className="w-10 h-10 rounded-full object-cover"
-                                />
-                            ) : (
-                                <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-bold">
-                                    {res.profiles?.name
-                                        ?.charAt(
-                                            0
-                                        )
-                                        .toUpperCase()}
-                                </div>
-                            )}
-
-                            <div>
-                                <p className="text-sm font-medium">
-                                    {res.profiles
-                                        ?.name ||
-                                        "Unknown User"}
-                                </p>
-
-                                <p className="text-xs text-gray-500">
-                                    {new Date(
-                                        res.created_at ||
-                                        ""
-                                    ).toLocaleDateString()}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* VISIBILITY */}
-                <div
-                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs ${res.visibility ===
-                        "public"
-                        ? "bg-green-500/20 text-green-400"
-                        : "bg-yellow-500/20 text-yellow-400"
-                        }`}
-                >
-                    {res.visibility ===
-                        "public" ? (
-                        <>
-                            <Globe size={12} />
-                            Public
-                        </>
-                    ) : (
-                        <>
-                            <Lock size={12} />
-                            Private
-                        </>
-                    )}
-                </div>
-            </div>
-
-            {/* BUTTONS */}
-            <div className="flex gap-3 mt-6">
-
-                {res.type === "pdf" ? (
-                    <a
-                        href={res.file_url}
-                        target="_blank"
-                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 py-3 rounded-2xl text-center transition"
-                    >
-                        Open PDF
-                    </a>
-                ) : (
-                    <a
-                        href={res.link}
-                        target="_blank"
-                        className="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-2xl text-center transition flex items-center justify-center gap-2"
-                    >
-                        <LinkIcon size={18} />
-                        Visit Link
-                    </a>
-                )}
-
-                {res.user_id ===
-                    user?.id && (
-                        <button
-                            onClick={() =>
-                                deleteResource(
-                                    res
-                                )
-                            }
-                            aria-label="Delete resource"
-                            title="Delete resource"
-                            className="bg-red-600 hover:bg-red-700 p-3 rounded-2xl transition"
-                        >
-                            <Trash2 size={18} />
-                        </button>
-                    )}
-            </div>
-        </div>
-    );
 
     return (
         <div className="min-h-screen bg-[#020817] text-white p-4 md:p-6">
 
-            {/* HEADER */}
-            <div className="mb-8">
-                <h1 className="text-4xl font-bold">
-                    Resource Library
-                </h1>
+            <div className="max-w-6xl mx-auto">
 
-                <p className="text-gray-400 mt-2">
-                    Share and discover study
-                    resources.
-                </p>
-            </div>
+                {/* HEADER */}
+                <div className="mb-8">
 
-            {/* UPLOAD BOX */}
-            <div className="bg-[#071226] border border-white/10 rounded-3xl p-5 md:p-6 mb-8">
+                    <h1 className="text-3xl md:text-4xl font-bold">
+                        My Profile
+                    </h1>
 
-                <h2 className="text-2xl font-semibold mb-6">
-                    Upload Resource
-                </h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-                    {/* TITLE */}
-                    <div>
-                        <label className="text-sm text-gray-400 mb-2 block">
-                            Title
-                        </label>
-                        <input
-                            type="text"
-                            placeholder="Title"
-                            value={title}
-                            onChange={(e) =>
-                                setTitle(
-                                    e.target.value
-                                )
-                            }
-                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none focus:border-indigo-500"
-                        />
-                    </div>
-
-                    {/* CATEGORY */}
-                    <div>
-                        <label htmlFor="profile-category-select" className="text-sm text-gray-400 mb-2 block">
-                            Category
-                        </label>
-                        <select
-                            id="profile-category-select"
-                            value={category}
-                            onChange={(e) =>
-                                setCategory(
-                                    e.target.value
-                                )
-                            }
-                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-                        >
-                            {categories
-                                .slice(1)
-                                .map((cat) => (
-                                    <option
-                                        key={cat}
-                                        value={cat}
-                                        className="bg-[#071226]"
-                                    >
-                                        {cat}
-                                    </option>
-                                ))}
-                        </select>
-                    </div>
-
-                    {/* VISIBILITY */}
-                    <div>
-                        <label htmlFor="profile-visibility-select" className="text-sm text-gray-400 mb-2 block">
-                            Visibility
-                        </label>
-                        <select
-                            id="profile-visibility-select"
-                            value={visibility}
-                            onChange={(e) =>
-                                setVisibility(
-                                    e.target.value
-                                )
-                            }
-                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-                        >
-                            <option value="public">
-                                Public
-                            </option>
-
-                            <option value="private">
-                                Private
-                            </option>
-                        </select>
-                    </div>
-
-                    {/* FILE */}
-                    <div>
-                        <label className="text-sm text-gray-400 mb-2 block">
-                            Upload PDF
-                        </label>
-                        <input
-                            type="file"
-                            accept=".pdf"
-                            onChange={(e) =>
-                                setFile(
-                                    e.target
-                                        .files?.[0] ||
-                                    null
-                                )
-                            }
-                            title="Upload PDF file"
-                            className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3"
-                        />
-                    </div>
+                    <p className="text-gray-400 mt-2">
+                        Manage your StudySphere
+                        account settings and
+                        profile information.
+                    </p>
                 </div>
 
-                {/* LINK */}
-                <div className="mt-5">
-                    <label className="text-sm text-gray-400 mb-2 block">
-                        Or Add Link
-                    </label>
-                    <div className="flex flex-col md:flex-row gap-3">
-
-                        <input
-                            type="text"
-                            placeholder="Paste link..."
-                            value={link}
-                            onChange={(e) =>
-                                setLink(
-                                    e.target.value
-                                )
-                            }
-                            className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 outline-none"
-                        />
-
-                        <button
-                            onClick={addLink}
-                            className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-2xl transition"
-                        >
-                            Add Link
-                        </button>
-                    </div>
-                </div>
-
-                {/* UPLOAD */}
-                <button
-                    onClick={uploadFile}
-                    disabled={loading}
-                    className="mt-6 bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-2xl transition flex items-center gap-2"
+                {/* MAIN CARD */}
+                <motion.div
+                    initial={{
+                        opacity: 0,
+                        y: 20,
+                    }}
+                    animate={{
+                        opacity: 1,
+                        y: 0,
+                    }}
+                    className="bg-[#071226] border border-white/10 rounded-3xl overflow-hidden"
                 >
-                    <Upload size={18} />
 
-                    {loading
-                        ? "Uploading..."
-                        : "Upload PDF"}
-                </button>
-            </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
 
-            {/* SEARCH */}
-            <div className="mb-8">
-                <label htmlFor="search-input" className="sr-only">Search resources</label>
-                <div className="relative">
+                        {/* LEFT SIDE */}
+                        <div className="border-b lg:border-b-0 lg:border-r border-white/10 p-6 md:p-8">
 
-                    <Search
-                        size={18}
-                        className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                            <div className="flex flex-col items-center">
 
-                    <input
-                        id="search-input"
-                        type="text"
-                        placeholder="Search resources..."
-                        value={search}
-                        onChange={(e) =>
-                            setSearch(
-                                e.target.value
-                            )
-                        }
-                        className="w-full bg-[#071226] border border-white/10 rounded-2xl pl-12 pr-4 py-4 outline-none focus:border-indigo-500"
-                    />
-                </div>
-            </div>
+                                {/* AVATAR */}
+                                <div className="relative">
 
-            {/* FILTERS */}
-            <div className="flex flex-wrap gap-3 mb-8">
+                                    {avatar ? (
+                                        <img
+                                            src={
+                                                avatar
+                                            }
+                                            alt="Profile"
+                                            className="w-36 h-36 md:w-44 md:h-44 rounded-full object-cover border-4 border-indigo-500 shadow-2xl"
+                                        />
+                                    ) : (
+                                        <div className="w-36 h-36 md:w-44 md:h-44 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-5xl font-bold shadow-2xl">
+                                            {name
+                                                ?.charAt(
+                                                    0
+                                                )
+                                                .toUpperCase() ||
+                                                user?.email
+                                                    ?.charAt(
+                                                        0
+                                                    )
+                                                    .toUpperCase()}
+                                        </div>
+                                    )}
 
-                {categories.map((cat) => (
-                    <button
-                        key={cat}
-                        onClick={() =>
-                            setSelectedCategory(
-                                cat
-                            )
-                        }
-                        className={`px-4 py-2 rounded-xl transition ${selectedCategory ===
-                            cat
-                            ? "bg-indigo-600"
-                            : "bg-white/5 hover:bg-white/10"
-                            }`}
-                    >
-                        {cat}
-                    </button>
-                ))}
-            </div>
+                                    <div className="absolute bottom-2 right-2 bg-indigo-600 p-3 rounded-full shadow-lg">
+                                        <Camera
+                                            size={
+                                                18
+                                            }
+                                        />
+                                    </div>
+                                </div>
 
-            {/* PUBLIC */}
-            <div className="mb-12">
+                                {/* UPLOAD */}
+                                <label
+                                    htmlFor="avatar-upload"
+                                    className="mt-6 cursor-pointer bg-indigo-600 hover:bg-indigo-700 px-5 py-3 rounded-2xl transition flex items-center gap-2"
+                                >
+                                    <Camera
+                                        size={
+                                            18
+                                        }
+                                    />
 
-                <div className="flex items-center gap-3 mb-6">
-                    <Globe className="text-green-400" />
+                                    {uploading
+                                        ? "Uploading..."
+                                        : "Upload Avatar"}
+                                </label>
 
-                    <h2 className="text-3xl font-bold">
-                        Public Resources
-                    </h2>
-                </div>
+                                <input
+                                    id="avatar-upload"
+                                    title="Upload avatar image"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={
+                                        uploadAvatar
+                                    }
+                                    className="hidden"
+                                />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                                {/* USER INFO */}
+                                <div className="text-center mt-6">
 
-                    {publicResources.map(
-                        (res) => (
-                            <ResourceCard
-                                key={res.id}
-                                res={res}
-                            />
-                        )
-                    )}
-                </div>
-            </div>
+                                    <h2 className="text-2xl font-bold break-words">
+                                        {name ||
+                                            "User"}
+                                    </h2>
 
-            {/* PRIVATE */}
-            <div>
+                                    <p className="text-gray-400 mt-2 break-all">
+                                        {
+                                            user?.email
+                                        }
+                                    </p>
+                                </div>
 
-                <div className="flex items-center gap-3 mb-6">
-                    <Lock className="text-yellow-400" />
+                                {/* STATUS */}
+                                <div className="w-full mt-8 space-y-4">
 
-                    <h2 className="text-3xl font-bold">
-                        My Private Resources
-                    </h2>
-                </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                                        <p className="text-gray-400 text-sm">
+                                            Account Status
+                                        </p>
 
-                    {privateResources.map(
-                        (res) => (
-                            <ResourceCard
-                                key={res.id}
-                                res={res}
-                            />
-                        )
-                    )}
-                </div>
+                                        <h3 className="text-green-400 font-semibold mt-1">
+                                            Active
+                                        </h3>
+                                    </div>
+
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+
+                                        <p className="text-gray-400 text-sm">
+                                            Role
+                                        </p>
+
+                                        <h3 className="text-indigo-400 font-semibold mt-1">
+                                            Student
+                                        </h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RIGHT SIDE */}
+                        <div className="p-6 md:p-8">
+
+                            <div className="space-y-6">
+
+                                {/* NAME */}
+                                <div>
+
+                                    <label
+                                        htmlFor="name-input"
+                                        className="flex items-center gap-2 text-sm text-gray-400 mb-3"
+                                    >
+                                        <User
+                                            size={
+                                                16
+                                            }
+                                        />
+                                        Full Name
+                                    </label>
+
+                                    <input
+                                        id="name-input"
+                                        title="Full name"
+                                        type="text"
+                                        placeholder="Enter your full name"
+                                        value={
+                                            name
+                                        }
+                                        onChange={(
+                                            e
+                                        ) =>
+                                            setName(
+                                                e
+                                                    .target
+                                                    .value
+                                            )
+                                        }
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-indigo-500 transition"
+                                    />
+                                </div>
+
+                                {/* EMAIL */}
+                                <div>
+
+                                    <label
+                                        htmlFor="email-input"
+                                        className="flex items-center gap-2 text-sm text-gray-400 mb-3"
+                                    >
+                                        <Mail
+                                            size={
+                                                16
+                                            }
+                                        />
+                                        Email Address
+                                    </label>
+
+                                    <input
+                                        id="email-input"
+                                        title="Email address"
+                                        type="text"
+                                        disabled
+                                        value={
+                                            user?.email ||
+                                            ""
+                                        }
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-gray-400"
+                                    />
+                                </div>
+
+                                {/* BIO */}
+                                <div>
+
+                                    <label
+                                        htmlFor="bio-input"
+                                        className="text-sm text-gray-400 mb-3 block"
+                                    >
+                                        Bio
+                                    </label>
+
+                                    <textarea
+                                        id="bio-input"
+                                        title="Bio"
+                                        placeholder="Write something about yourself..."
+                                        value={
+                                            bio
+                                        }
+                                        onChange={(
+                                            e
+                                        ) =>
+                                            setBio(
+                                                e
+                                                    .target
+                                                    .value
+                                            )
+                                        }
+                                        rows={6}
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none resize-none focus:border-indigo-500 transition"
+                                    />
+                                </div>
+
+                                {/* BUTTONS */}
+                                <div className="flex flex-col sm:flex-row gap-4 pt-2">
+
+                                    <motion.button
+                                        whileHover={{
+                                            scale: 1.02,
+                                        }}
+                                        whileTap={{
+                                            scale: 0.98,
+                                        }}
+                                        onClick={
+                                            saveProfile
+                                        }
+                                        disabled={
+                                            loading
+                                        }
+                                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 py-4 rounded-2xl transition flex items-center justify-center gap-2 font-medium"
+                                    >
+                                        <Save
+                                            size={
+                                                18
+                                            }
+                                        />
+
+                                        {loading
+                                            ? "Saving..."
+                                            : "Save Profile"}
+                                    </motion.button>
+
+                                    <motion.button
+                                        whileHover={{
+                                            scale: 1.02,
+                                        }}
+                                        whileTap={{
+                                            scale: 0.98,
+                                        }}
+                                        onClick={
+                                            logout
+                                        }
+                                        className="flex-1 bg-red-600 hover:bg-red-700 py-4 rounded-2xl transition flex items-center justify-center gap-2 font-medium"
+                                    >
+                                        <LogOut
+                                            size={
+                                                18
+                                            }
+                                        />
+
+                                        Logout
+                                    </motion.button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
             </div>
         </div>
     );
