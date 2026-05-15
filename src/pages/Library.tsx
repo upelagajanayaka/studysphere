@@ -370,10 +370,12 @@ export default function Library() {
 
                 {res.user_id === user?.id && (
                     <button
+                        type="button"
                         onClick={() =>
                             deleteResource(res)
                         }
                         className="w-full sm:w-auto bg-red-600 hover:bg-red-700 p-3 rounded-2xl transition"
+                        aria-label="Delete resource"
                     >
                         <Trash2 size={18} />
                     </button>
@@ -415,6 +417,7 @@ export default function Library() {
                         onChange={(e) =>
                             setCategory(e.target.value)
                         }
+                        aria-label="Select category"
                         className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3"
                     >
                         {categories
@@ -434,6 +437,7 @@ export default function Library() {
                         onChange={(e) =>
                             setVisibility(e.target.value)
                         }
+                        aria-label="Select visibility"
                         className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3"
                     >
                         <option value="public">
@@ -448,6 +452,7 @@ export default function Library() {
                     <input
                         type="file"
                         accept=".pdf"
+                        title="Upload PDF file"
                         onChange={(e) =>
                             setFile(
                                 e.target.files?.[0] ||

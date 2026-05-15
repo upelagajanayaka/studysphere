@@ -10,3 +10,11 @@ body {
 * {
   @apply transition-colors duration-200;
 }
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
