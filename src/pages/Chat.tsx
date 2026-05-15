@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import {
+    useEffect,
+    useRef,
+    useState,
+} from "react";
+
 import { supabase } from "../lib/supabase";
 
 import {
     Send,
     Plus,
-    X,
-    Trash2,
     Search,
-    Menu,
+    ArrowLeft,
+    X,
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,7 +21,7 @@ export default function Chat() {
     const [profiles, setProfiles] =
         useState<any[]>([]);
 
-    const [allUsers, setAllUsers] =
+    const [chatUsers, setChatUsers] =
         useState<any[]>([]);
 
     const [selectedUser, setSelectedUser] =
@@ -38,14 +42,11 @@ export default function Chat() {
     const [search, setSearch] =
         useState("");
 
-    const [mobileSidebar, setMobileSidebar] =
-        useState(false);
-
     const bottomRef =
         useRef<HTMLDivElement>(null);
 
     // =========================
-    // GET USER
+    // GET CURRENT USER
     // =========================
     useEffect(() => {
         getCurrentUser();
@@ -69,129 +70,103 @@ export default function Chat() {
             })
             .eq("id", user.id);
 
-        getUsers(user.id);
-
-        getAllUsers(user.id);
+        fetchUsers(user.id);
     };
 
     // =========================
-    // GET CHAT USERS
+    // FETCH USERS
     // =========================
-    const getUsers = async (
+    const fetchUsers = async (
         myId: string
     ) => {
 
         const { data, error } =
             await supabase
-                .from("chat_users")
-                .select(`
-                    id,
-                    friend_id,
-                    profiles!chat_users_friend_id_fkey (
-                        id,
-                        name,
-                        email,
-                        avatar_url,
-                        is_online
-                    )
-                `)
-                .eq("user_id", myId);
-
-        if (error) {
-            console.log(error);
-            return;
-        }
-
-        const formatted =
-            data?.map((item: any) => ({
-                chat_id: item.id,
-                ...item.profiles,
-            })) || [];
-
-        setProfiles(formatted);
-    };
-
-    // =========================
-    // GET ALL USERS
-    // =========================
-    const getAllUsers = async (
-        myId: string
-    ) => {
-
-        const { data } =
-            await supabase
                 .from("profiles")
                 .select("*")
                 .neq("id", myId);
 
-        setAllUsers(data || []);
+        if (!error && data) {
+            setProfiles(data);
+        }
+
+        // CHAT LIST
+        const saved =
+            localStorage.getItem(
+                `chat_users_${myId}`
+            );
+
+        if (saved) {
+            setChatUsers(
+                JSON.parse(saved)
+            );
+        }
     };
 
     // =========================
-    // ADD CHAT
+    // SAVE CHAT USERS
     // =========================
-    const addChatUser = async (
-        friend: any
+    const saveChatUsers = (
+        users: any[]
     ) => {
 
         if (!currentUser) return;
 
-        const alreadyExists =
-            profiles.find(
-                (p) => p.id === friend.id
+        localStorage.setItem(
+            `chat_users_${currentUser.id}`,
+            JSON.stringify(users)
+        );
+
+        setChatUsers(users);
+    };
+
+    // =========================
+    // ADD USER
+    // =========================
+    const addUserToChat = (
+        user: any
+    ) => {
+
+        const exists =
+            chatUsers.find(
+                (u) => u.id === user.id
             );
 
-        if (alreadyExists) {
-            setShowModal(false);
-            return;
-        }
+        if (exists) return;
 
-        const { error } =
-            await supabase
-                .from("chat_users")
-                .insert([
-                    {
-                        user_id:
-                            currentUser.id,
-                        friend_id:
-                            friend.id,
-                    },
-                ]);
+        const updated = [
+            user,
+            ...chatUsers,
+        ];
 
-        if (error) {
-            console.log(error);
-            return;
-        }
-
-        getUsers(currentUser.id);
+        saveChatUsers(updated);
 
         setShowModal(false);
     };
 
     // =========================
-    // REMOVE CHAT
+    // REMOVE USER
     // =========================
-    const removeChat = async (
-        chatId: string
+    const removeUser = (
+        id: string
     ) => {
 
-        await supabase
-            .from("chat_users")
-            .delete()
-            .eq("id", chatId);
+        const updated =
+            chatUsers.filter(
+                (u) => u.id !== id
+            );
+
+        saveChatUsers(updated);
 
         if (
-            selectedUser?.chat_id ===
-            chatId
+            selectedUser?.id === id
         ) {
             setSelectedUser(null);
         }
-
-        getUsers(currentUser.id);
     };
 
     // =========================
-    // GET MESSAGES
+    // FETCH MESSAGES
     // =========================
     useEffect(() => {
 
@@ -204,13 +179,17 @@ export default function Chat() {
 
             const channel =
                 supabase
-                    .channel("chat-room")
+                    .channel(
+                        "chat-room"
+                    )
                     .on(
                         "postgres_changes",
                         {
                             event: "*",
-                            schema: "public",
-                            table: "messages",
+                            schema:
+                                "public",
+                            table:
+                                "messages",
                         },
                         () => {
                             fetchMessages();
@@ -236,30 +215,38 @@ export default function Chat() {
             )
                 return;
 
-            const { data } =
-                await supabase
-                    .from("messages")
-                    .select("*")
-                    .or(
-                        `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${currentUser.id})`
-                    )
-                    .order(
-                        "created_at",
-                        {
-                            ascending: true,
-                        }
-                    );
-
-            setMessages(data || []);
-
-            setTimeout(() => {
-                bottomRef.current?.scrollIntoView(
+            const {
+                data,
+                error,
+            } = await supabase
+                .from("messages")
+                .select("*")
+                .or(
+                    `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${currentUser.id})`
+                )
+                .order(
+                    "created_at",
                     {
-                        behavior:
-                            "smooth",
+                        ascending: true,
                     }
                 );
-            }, 100);
+
+            if (
+                !error &&
+                data
+            ) {
+
+                setMessages(data);
+
+                setTimeout(() => {
+                    bottomRef.current?.scrollIntoView(
+                        {
+                            behavior:
+                                "smooth",
+                        }
+                    );
+                }, 100);
+            }
         };
 
     // =========================
@@ -274,17 +261,27 @@ export default function Chat() {
             )
                 return;
 
-            await supabase
-                .from("messages")
-                .insert([
-                    {
-                        text: newMessage,
-                        sender_id:
-                            currentUser.id,
-                        receiver_id:
-                            selectedUser.id,
-                    },
-                ]);
+            const { error } =
+                await supabase
+                    .from(
+                        "messages"
+                    )
+                    .insert([
+                        {
+                            text: newMessage,
+                            sender_id:
+                                currentUser.id,
+                            receiver_id:
+                                selectedUser.id,
+                        },
+                    ]);
+
+            if (error) {
+                console.log(
+                    error
+                );
+                return;
+            }
 
             setNewMessage("");
         };
@@ -293,8 +290,8 @@ export default function Chat() {
     // FILTER USERS
     // =========================
     const filteredUsers =
-        allUsers.filter((user) =>
-            user.name
+        profiles.filter((u) =>
+            u.name
                 ?.toLowerCase()
                 .includes(
                     search.toLowerCase()
@@ -302,184 +299,41 @@ export default function Chat() {
         );
 
     return (
-        <div className="h-[100dvh] bg-[#020817] text-white flex overflow-hidden relative">
+        <div className="h-screen bg-[#020817] text-white flex overflow-hidden">
 
-            {/* MOBILE MENU */}
-            <button
-                type="button"
-                aria-label="Open chats"
-                title="Open chats"
-                onClick={() =>
-                    setMobileSidebar(true)
-                }
-                className="md:hidden absolute top-4 left-4 z-40 bg-indigo-600 p-2 rounded-xl"
+            {/* SIDEBAR */}
+            <div
+                className={`
+                    ${selectedUser
+                        ? "hidden md:flex"
+                        : "flex"
+                    }
+
+                    w-full md:w-[340px]
+                    bg-[#071226]
+                    border-r border-white/10
+                    flex-col
+                    shrink-0
+                `}
             >
-                <Menu size={22} />
-            </button>
 
-            {/* MOBILE OVERLAY */}
-            <AnimatePresence>
-                {mobileSidebar && (
-                    <>
-                        <motion.div
-                            initial={{
-                                opacity: 0,
-                            }}
-                            animate={{
-                                opacity: 1,
-                            }}
-                            exit={{
-                                opacity: 0,
-                            }}
-                            onClick={() =>
-                                setMobileSidebar(
-                                    false
-                                )
-                            }
-                            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-                        />
-
-                        <motion.div
-                            initial={{
-                                x: -300,
-                            }}
-                            animate={{
-                                x: 0,
-                            }}
-                            exit={{
-                                x: -300,
-                            }}
-                            className="fixed left-0 top-0 w-[320px] h-full bg-[#071226] z-50 border-r border-white/10 flex flex-col md:hidden"
-                        >
-
-                            {/* SIDEBAR HEADER */}
-                            <div className="p-5 border-b border-white/10 flex items-center justify-between">
-
-                                <h1 className="text-2xl font-bold">
-                                    Chats
-                                </h1>
-
-                                <button
-                                    type="button"
-                                    aria-label="Close"
-                                    title="Close"
-                                    onClick={() =>
-                                        setMobileSidebar(
-                                            false
-                                        )
-                                    }
-                                >
-                                    <X
-                                        size={24}
-                                    />
-                                </button>
-                            </div>
-
-                            {/* CHAT USERS */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-
-                                {profiles.map(
-                                    (
-                                        profile
-                                    ) => (
-                                        <div
-                                            key={
-                                                profile.id
-                                            }
-                                            className="bg-white/5 rounded-2xl p-3"
-                                        >
-                                            <div className="flex items-center gap-3">
-
-                                                {profile.avatar_url ? (
-                                                    <img
-                                                        src={
-                                                            profile.avatar_url
-                                                        }
-                                                        alt=""
-                                                        className="w-12 h-12 rounded-full object-cover"
-                                                    />
-                                                ) : (
-                                                    <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center">
-                                                        {profile.name
-                                                            ?.charAt(
-                                                                0
-                                                            )
-                                                            .toUpperCase()}
-                                                    </div>
-                                                )}
-
-                                                <div
-                                                    className="flex-1 cursor-pointer"
-                                                    onClick={() => {
-                                                        setSelectedUser(
-                                                            profile
-                                                        );
-
-                                                        setMobileSidebar(
-                                                            false
-                                                        );
-                                                    }}
-                                                >
-                                                    <h2 className="font-semibold">
-                                                        {
-                                                            profile.name
-                                                        }
-                                                    </h2>
-
-                                                    <p className="text-xs text-gray-400">
-                                                        {profile.is_online
-                                                            ? "Online"
-                                                            : "Offline"}
-                                                    </p>
-                                                </div>
-
-                                                <button
-                                                    type="button"
-                                                    aria-label="Remove chat"
-                                                    title="Remove chat"
-                                                    onClick={() =>
-                                                        removeChat(
-                                                            profile.chat_id
-                                                        )
-                                                    }
-                                                    className="text-red-400"
-                                                >
-                                                    <Trash2
-                                                        size={
-                                                            18
-                                                        }
-                                                    />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )
-                                )}
-                            </div>
-                        </motion.div>
-                    </>
-                )}
-            </AnimatePresence>
-
-            {/* DESKTOP SIDEBAR */}
-            <div className="hidden md:flex w-[320px] bg-[#071226] border-r border-white/10 flex-col shrink-0">
-
-                {/* HEADER */}
-                <div className="p-5 border-b border-white/10 flex items-center justify-between">
+                {/* MOBILE HEADER */}
+                <div className="md:hidden h-[70px] border-b border-white/10 flex items-center justify-between px-4">
 
                     <div>
-                        <h1 className="text-2xl font-bold">
+                        <h1 className="text-xl font-bold">
                             Chats
                         </h1>
 
-                        <p className="text-sm text-gray-400 mt-1">
-                            Private Messaging
+                        <p className="text-xs text-gray-400">
+                            StudySphere Messenger
                         </p>
                     </div>
 
                     <button
                         type="button"
-                        aria-label="Add chat"
-                        title="Add chat"
+                        title="Add User"
+                        aria-label="Add User"
                         onClick={() =>
                             setShowModal(true)
                         }
@@ -489,33 +343,65 @@ export default function Chat() {
                     </button>
                 </div>
 
+                {/* DESKTOP HEADER */}
+                <div className="hidden md:flex p-6 border-b border-white/10 items-center justify-between">
+
+                    <div>
+                        <h1 className="text-2xl font-bold">
+                            Chats
+                        </h1>
+
+                        <p className="text-sm text-gray-400 mt-1">
+                            StudySphere Messenger
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        title="Add User"
+                        aria-label="Add User"
+                        onClick={() =>
+                            setShowModal(true)
+                        }
+                        className="w-12 h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 flex items-center justify-center"
+                    >
+                        <Plus size={22} />
+                    </button>
+                </div>
+
                 {/* USERS */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
 
-                    {profiles.map((profile) => (
+                    {chatUsers.length === 0 && (
+                        <div className="text-center text-gray-400 mt-10">
+                            No chats yet
+                        </div>
+                    )}
 
-                        <motion.div
-                            key={profile.id}
-                            whileHover={{
-                                scale: 1.02,
-                            }}
-                            className={`p-4 rounded-3xl border transition ${selectedUser?.id ===
-                                profile.id
-                                ? "bg-indigo-600 border-indigo-500"
-                                : "bg-white/5 border-white/10"
-                                }`}
-                        >
-                            <div className="flex items-center gap-3">
+                    {chatUsers.map(
+                        (profile) => (
+                            <motion.div
+                                key={
+                                    profile.id
+                                }
+                                whileHover={{
+                                    scale: 1.02,
+                                }}
+                                onClick={() =>
+                                    setSelectedUser(
+                                        profile
+                                    )
+                                }
+                                className={`p-4 rounded-3xl cursor-pointer border transition ${selectedUser?.id ===
+                                    profile.id
+                                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-transparent"
+                                    : "bg-white/5 border-white/10 hover:bg-white/10"
+                                    }`}
+                            >
 
-                                <div
-                                    onClick={() =>
-                                        setSelectedUser(
-                                            profile
-                                        )
-                                    }
-                                    className="flex items-center gap-3 flex-1 cursor-pointer"
-                                >
+                                <div className="flex items-center gap-4">
 
+                                    {/* AVATAR */}
                                     {profile.avatar_url ? (
                                         <img
                                             src={
@@ -525,7 +411,7 @@ export default function Chat() {
                                             className="w-14 h-14 rounded-full object-cover"
                                         />
                                     ) : (
-                                        <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center">
+                                        <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-lg font-bold">
                                             {profile.name
                                                 ?.charAt(
                                                     0
@@ -534,7 +420,8 @@ export default function Chat() {
                                         </div>
                                     )}
 
-                                    <div className="overflow-hidden">
+                                    {/* INFO */}
+                                    <div className="flex-1 overflow-hidden">
 
                                         <h2 className="font-semibold truncate">
                                             {
@@ -542,138 +429,181 @@ export default function Chat() {
                                             }
                                         </h2>
 
-                                        <p className="text-xs text-gray-400">
-                                            {profile.is_online
-                                                ? "Online"
-                                                : "Offline"}
+                                        <p className="text-sm text-gray-400 truncate">
+                                            {
+                                                profile.email
+                                            }
                                         </p>
                                     </div>
-                                </div>
 
-                                <button
-                                    type="button"
-                                    aria-label="Remove chat"
-                                    title="Remove chat"
-                                    onClick={() =>
-                                        removeChat(
-                                            profile.chat_id
-                                        )
-                                    }
-                                    className="text-red-400"
-                                >
-                                    <Trash2
-                                        size={18}
-                                    />
-                                </button>
-                            </div>
-                        </motion.div>
-                    ))}
+                                    {/* REMOVE */}
+                                    <button
+                                        type="button"
+                                        title="Remove Chat"
+                                        aria-label="Remove Chat"
+                                        onClick={(
+                                            e
+                                        ) => {
+                                            e.stopPropagation();
+
+                                            removeUser(
+                                                profile.id
+                                            );
+                                        }}
+                                        className="text-gray-400 hover:text-red-400"
+                                    >
+                                        <X
+                                            size={
+                                                18
+                                            }
+                                        />
+                                    </button>
+                                </div>
+                            </motion.div>
+                        )
+                    )}
                 </div>
             </div>
 
             {/* CHAT AREA */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div
+                className={`
+                    ${selectedUser
+                        ? "flex"
+                        : "hidden md:flex"
+                    }
+
+                    flex-1
+                    flex-col
+                    h-full
+                `}
+            >
 
                 {selectedUser ? (
                     <>
-                        {/* TOP */}
-                        <div className="h-[80px] border-b border-white/10 bg-[#071226] flex items-center px-5 shrink-0">
+                        {/* CHAT HEADER */}
+                        <div className="h-[80px] border-b border-white/10 bg-[#071226] flex items-center px-4 md:px-6 shrink-0">
 
-                            <div className="flex items-center gap-3">
+                            {/* BACK */}
+                            <button
+                                type="button"
+                                title="Back"
+                                aria-label="Back"
+                                onClick={() =>
+                                    setSelectedUser(null)
+                                }
+                                className="md:hidden mr-3 bg-white/10 p-2 rounded-xl"
+                            >
+                                <ArrowLeft
+                                    size={
+                                        20
+                                    }
+                                />
+                            </button>
 
-                                {selectedUser.avatar_url ? (
-                                    <img
-                                        src={
-                                            selectedUser.avatar_url
-                                        }
-                                        alt=""
-                                        className="w-12 h-12 rounded-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center">
-                                        {selectedUser.name
-                                            ?.charAt(
-                                                0
-                                            )
-                                            .toUpperCase()}
-                                    </div>
-                                )}
-
-                                <div>
-                                    <h2 className="font-semibold text-lg">
-                                        {
-                                            selectedUser.name
-                                        }
-                                    </h2>
-
-                                    <p className="text-xs text-gray-400">
-                                        {selectedUser.is_online
-                                            ? "Online"
-                                            : "Offline"}
-                                    </p>
+                            {/* AVATAR */}
+                            {selectedUser.avatar_url ? (
+                                <img
+                                    src={
+                                        selectedUser.avatar_url
+                                    }
+                                    alt=""
+                                    className="w-12 h-12 rounded-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center font-bold">
+                                    {selectedUser.name
+                                        ?.charAt(
+                                            0
+                                        )
+                                        .toUpperCase()}
                                 </div>
+                            )}
+
+                            {/* INFO */}
+                            <div className="ml-4 overflow-hidden">
+
+                                <h1 className="font-semibold truncate">
+                                    {
+                                        selectedUser.name
+                                    }
+                                </h1>
+
+                                <p className="text-sm text-green-400">
+                                    Online
+                                </p>
                             </div>
                         </div>
 
                         {/* MESSAGES */}
                         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
 
-                            {messages.map((msg) => {
+                            {messages.map(
+                                (msg) => {
 
-                                const mine =
-                                    msg.sender_id ===
-                                    currentUser.id;
+                                    const mine =
+                                        msg.sender_id ===
+                                        currentUser.id;
 
-                                return (
-                                    <div
-                                        key={msg.id}
-                                        className={`flex ${mine
-                                            ? "justify-end"
-                                            : "justify-start"
-                                            }`}
-                                    >
+                                    return (
                                         <div
-                                            className={`max-w-[85%] md:max-w-[60%] px-4 py-3 rounded-3xl ${mine
-                                                ? "bg-indigo-600"
-                                                : "bg-white/10"
+                                            key={
+                                                msg.id
+                                            }
+                                            className={`flex ${mine
+                                                ? "justify-end"
+                                                : "justify-start"
                                                 }`}
                                         >
-                                            <p className="text-sm break-words leading-relaxed">
-                                                {
-                                                    msg.text
-                                                }
-                                            </p>
-
-                                            <p className="text-[10px] text-gray-300 mt-1 text-right">
-                                                {new Date(
-                                                    msg.created_at
-                                                ).toLocaleTimeString(
-                                                    [],
+                                            <div
+                                                className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-3xl ${mine
+                                                    ? "bg-gradient-to-r from-indigo-600 to-purple-600"
+                                                    : "bg-white/10"
+                                                    }`}
+                                            >
+                                                <p className="text-sm break-words">
                                                     {
-                                                        hour:
-                                                            "2-digit",
-                                                        minute:
-                                                            "2-digit",
+                                                        msg.text
                                                     }
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                                </p>
 
-                            <div ref={bottomRef} />
+                                                <p className="text-[10px] text-gray-300 mt-2 text-right">
+                                                    {new Date(
+                                                        msg.created_at
+                                                    ).toLocaleTimeString(
+                                                        [],
+                                                        {
+                                                            hour:
+                                                                "2-digit",
+                                                            minute:
+                                                                "2-digit",
+                                                        }
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                            )}
+
+                            <div
+                                ref={
+                                    bottomRef
+                                }
+                            />
                         </div>
 
                         {/* INPUT */}
-                        <div className="p-4 border-t border-white/10 bg-[#071226] shrink-0">
+                        <div className="p-4 border-t border-white/10 bg-[#071226]">
 
                             <div className="flex items-center gap-3">
 
                                 <input
                                     type="text"
                                     placeholder="Type a message..."
-                                    value={newMessage}
+                                    value={
+                                        newMessage
+                                    }
                                     onChange={(
                                         e
                                     ) =>
@@ -693,36 +623,40 @@ export default function Chat() {
                                             sendMessage();
                                         }
                                     }}
-                                    className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-5 py-3 outline-none focus:border-indigo-500 text-sm"
+                                    className="flex-1 bg-white/10 border border-white/10 rounded-2xl px-5 py-4 outline-none text-sm focus:border-indigo-500"
                                 />
 
                                 <button
                                     type="button"
-                                    aria-label="Send message"
-                                    title="Send message"
+                                    title="Send Message"
+                                    aria-label="Send Message"
                                     onClick={
                                         sendMessage
                                     }
-                                    className="w-12 h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 flex items-center justify-center shrink-0"
+                                    className="w-14 h-14 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shrink-0"
                                 >
                                     <Send
-                                        size={20}
+                                        size={
+                                            22
+                                        }
                                     />
                                 </button>
                             </div>
                         </div>
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-400 px-6 text-center">
-                        Select or add a user to start chatting
+                    <div className="hidden md:flex flex-1 items-center justify-center text-gray-400">
+                        Select a user to start chatting
                     </div>
                 )}
             </div>
 
             {/* ADD USER MODAL */}
             <AnimatePresence>
+
                 {showModal && (
                     <>
+                        {/* BACKDROP */}
                         <motion.div
                             initial={{
                                 opacity: 0,
@@ -734,49 +668,49 @@ export default function Chat() {
                                 opacity: 0,
                             }}
                             onClick={() =>
-                                setShowModal(
-                                    false
-                                )
+                                setShowModal(false)
                             }
-                            className="fixed inset-0 bg-black/50 z-50"
+                            className="fixed inset-0 bg-black/60 z-40"
                         />
 
+                        {/* MODAL */}
                         <motion.div
                             initial={{
-                                scale: 0.9,
                                 opacity: 0,
+                                scale: 0.9,
                             }}
                             animate={{
-                                scale: 1,
                                 opacity: 1,
+                                scale: 1,
                             }}
                             exit={{
-                                scale: 0.9,
                                 opacity: 0,
+                                scale: 0.9,
                             }}
                             className="fixed inset-0 flex items-center justify-center z-50 p-4"
                         >
 
                             <div className="w-full max-w-md bg-[#071226] border border-white/10 rounded-3xl p-6">
 
+                                {/* HEADER */}
                                 <div className="flex items-center justify-between mb-5">
 
                                     <h2 className="text-2xl font-bold">
-                                        Add Chat
+                                        Add User
                                     </h2>
 
                                     <button
                                         type="button"
-                                        aria-label="Close modal"
-                                        title="Close modal"
+                                        title="Close"
+                                        aria-label="Close"
                                         onClick={() =>
-                                            setShowModal(
-                                                false
-                                            )
+                                            setShowModal(false)
                                         }
                                     >
                                         <X
-                                            size={24}
+                                            size={
+                                                24
+                                            }
                                         />
                                     </button>
                                 </div>
@@ -785,14 +719,18 @@ export default function Chat() {
                                 <div className="relative mb-5">
 
                                     <Search
-                                        size={18}
+                                        size={
+                                            18
+                                        }
                                         className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
                                     />
 
                                     <input
                                         type="text"
                                         placeholder="Search users..."
-                                        value={search}
+                                        value={
+                                            search
+                                        }
                                         onChange={(
                                             e
                                         ) =>
@@ -802,7 +740,7 @@ export default function Chat() {
                                                     .value
                                             )
                                         }
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl pl-11 pr-4 py-3 outline-none focus:border-indigo-500"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-3 outline-none focus:border-indigo-500"
                                     />
                                 </div>
 
@@ -813,19 +751,14 @@ export default function Chat() {
                                         (
                                             profile
                                         ) => (
-
                                             <div
                                                 key={
                                                     profile.id
                                                 }
-                                                onClick={() =>
-                                                    addChatUser(
-                                                        profile
-                                                    )
-                                                }
-                                                className="bg-white/5 hover:bg-white/10 p-4 rounded-2xl cursor-pointer transition"
+                                                className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between"
                                             >
-                                                <div className="flex items-center gap-3">
+
+                                                <div className="flex items-center gap-3 overflow-hidden">
 
                                                     {profile.avatar_url ? (
                                                         <img
@@ -836,7 +769,7 @@ export default function Chat() {
                                                             className="w-12 h-12 rounded-full object-cover"
                                                         />
                                                     ) : (
-                                                        <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center">
+                                                        <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center font-bold">
                                                             {profile.name
                                                                 ?.charAt(
                                                                     0
@@ -845,20 +778,35 @@ export default function Chat() {
                                                         </div>
                                                     )}
 
-                                                    <div>
-                                                        <h3 className="font-semibold">
+                                                    <div className="overflow-hidden">
+
+                                                        <h3 className="font-medium truncate">
                                                             {
                                                                 profile.name
                                                             }
                                                         </h3>
 
-                                                        <p className="text-xs text-gray-400">
+                                                        <p className="text-sm text-gray-400 truncate">
                                                             {
                                                                 profile.email
                                                             }
                                                         </p>
                                                     </div>
                                                 </div>
+
+                                                <button
+                                                    type="button"
+                                                    title="Add User"
+                                                    aria-label="Add User"
+                                                    onClick={() =>
+                                                        addUserToChat(
+                                                            profile
+                                                        )
+                                                    }
+                                                    className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl text-sm shrink-0"
+                                                >
+                                                    Add
+                                                </button>
                                             </div>
                                         )
                                     )}
