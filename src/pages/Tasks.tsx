@@ -148,7 +148,7 @@ export default function Tasks() {
             {/* Task List */}
             <div className="space-y-3">
                 {tasks.length === 0 && (
-                    <p className="text-gray-400">No tasks yet 🚀</p>
+                    <p className="text-gray-400">No tasks yet </p>
                 )}
 
                 {tasks.map((task) => (

@@ -85,20 +85,39 @@ export default function Chat() {
                 .from("profiles")
                 .select("*")
                 .neq("id", myId);
+        console.log("CHAT PROFILES:", data);
+        console.log("CHAT PROFILE ERROR:", error);
 
         if (!error && data) {
             setProfiles(data);
         }
 
         // CHAT LIST
+        // CHAT LIST
         const saved =
             localStorage.getItem(
                 `chat_users_${myId}`
             );
 
-        if (saved) {
-            setChatUsers(
-                JSON.parse(saved)
+        if (saved && data) {
+            const savedUsers = JSON.parse(saved);
+
+            // Refresh saved chat users with latest profile data
+            const updatedUsers = savedUsers
+                .map((savedUser: any) => {
+                    const latestProfile = data.find(
+                        (profile: any) =>
+                            profile.id === savedUser.id
+                    );
+
+                    return latestProfile || savedUser;
+                });
+
+            setChatUsers(updatedUsers);
+
+            localStorage.setItem(
+                `chat_users_${myId}`,
+                JSON.stringify(updatedUsers)
             );
         }
     };
